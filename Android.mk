@@ -20,7 +20,12 @@ LOCAL_SRC_FILES := \
     prop.c \
     default_recovery_ui.c \
     adb_install.c \
-    verifier.c
+    verifier.c \
+    ubi/ubiutils-common.c \
+    ubi/libubi.c
+
+LOCAL_C_INCLUDES += \
+     bootable/recovery/ubi/include
     
 ADDITIONAL_RECOVERY_FILES := $(shell echo $$ADDITIONAL_RECOVERY_FILES)
 LOCAL_SRC_FILES += $(ADDITIONAL_RECOVERY_FILES)
@@ -34,12 +39,15 @@ RECOVERY_NAME := ClockworkMod Recovery
 LOCAL_CFLAGS += -DI_AM_KOUSH
 else
 ifndef RECOVERY_NAME
-RECOVERY_NAME := Carliv Touch Recovery v 1.3
+RECOVERY_NAME := Carliv Touch Recovery v 2.1
 endif
 endif
 
-#RECOVERY_VERSION_INFO := ClockworkMod-based v6.0.4.4
-RECOVERY_VERSION_INFO := MTK CWM-based v6.0.4.4
+ifeq ($(TARGET_MTK_CPU),)
+  RECOVERY_VERSION_INFO := ClockworkMod-based v6.0.4.4
+else
+  RECOVERY_VERSION_INFO := MTK CWM-based v6.0.4.4
+endif
 
 RECOVERY_VERSION := $(RECOVERY_NAME)
 # Please leave this in place if you use my source to build. Add a new line on recovery.c at "ui_prints" with your name, like "compiled by .... for phone". Thank you!
@@ -58,12 +66,20 @@ ifeq ($(BOARD_USE_CUSTOM_RECOVERY_FONT),)
   BOARD_USE_CUSTOM_RECOVERY_FONT := \"font_10x18.h\"
 endif
 
+ifeq ($(RECOVERY_TOUCHSCREEN_FLIP_X), true)
+LOCAL_CFLAGS += -DRECOVERY_TOUCHSCREEN_FLIP_X
+endif
+
+ifeq ($(RECOVERY_TOUCHSCREEN_FLIP_Y), true)
+LOCAL_CFLAGS += -DRECOVERY_TOUCHSCREEN_FLIP_Y
+endif
+
 BOARD_RECOVERY_CHAR_WIDTH := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 1)
 BOARD_RECOVERY_CHAR_HEIGHT := $(shell echo $(BOARD_USE_CUSTOM_RECOVERY_FONT) | cut -d _  -f 2 | cut -d . -f 1 | cut -d x -f 2)
 
 LOCAL_CFLAGS += -DBOARD_RECOVERY_CHAR_WIDTH=$(BOARD_RECOVERY_CHAR_WIDTH) -DBOARD_RECOVERY_CHAR_HEIGHT=$(BOARD_RECOVERY_CHAR_HEIGHT)
 
-BOARD_RECOVERY_DEFINES := BOARD_HAS_NO_SELECT_BUTTON BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES BOARD_RECOVERY_HANDLES_MOUNT BOARD_TOUCH_RECOVERY RECOVERY_EXTEND_NANDROID_MENU TARGET_USE_CUSTOM_LUN_FILE_PATH TARGET_DEVICE
+BOARD_RECOVERY_DEFINES := BOARD_HAS_NO_SELECT_BUTTON BOARD_UMS_LUNFILE BOARD_RECOVERY_ALWAYS_WIPES BOARD_RECOVERY_HANDLES_MOUNT BOARD_TOUCH_RECOVERY RECOVERY_EXTEND_NANDROID_MENU TARGET_USE_CUSTOM_LUN_FILE_PATH TARGET_DEVICE TARGET_MTK_CPU
 
 $(foreach board_define,$(BOARD_RECOVERY_DEFINES), \
   $(if $($(board_define)), \

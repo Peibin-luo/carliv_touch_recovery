@@ -5,7 +5,9 @@ LOCAL_PATH := $(call my-dir)
 updater_src_files := \
 	../mounts.c \
 	install.c \
-	updater.c
+	updater.c \
+	../ubi/ubiutils-common.c \
+	../ubi/libubi.c
 
 #
 # Build a statically-linked binary to include in OTA packages

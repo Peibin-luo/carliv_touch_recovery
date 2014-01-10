@@ -129,7 +129,7 @@ return 0;
 
 //For those devices which has skewed X axis and Y axis detection limit (Not similar to XY resolution of device), So need normalization
 int MT_X(int fd, int x)
-{	
+{
 	int abs_store[6] = {0};
 
   	ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), abs_store);
@@ -141,7 +141,7 @@ int MT_X(int fd, int x)
 }
 
 int MT_Y(int fd, int y)
-{	
+{
 	int abs_store[6] = {0};
    	
    	ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), abs_store);

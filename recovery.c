@@ -798,6 +798,7 @@ int run_script_file(void) {
 		 value1[SCRIPT_COMMAND_SIZE], value2[SCRIPT_COMMAND_SIZE];
 	char *val_start, *tok;
 	int ors_system = 0;
+	int ors_custpack = 0;
 	int ors_data = 0;
 	int ors_cache = 0;
 	int ors_recovery = 0;
@@ -925,6 +926,7 @@ int run_script_file(void) {
 				tok = strtok(NULL, " ");
 				if (tok != NULL) {
 					ors_system = 0;
+					ors_custpack = 0;
 					ors_data = 0;
 					ors_cache = 0;
 					ors_boot = 0;
@@ -938,6 +940,9 @@ int run_script_file(void) {
 						if (value2[i] == 'S' || value2[i] == 's') {
 							ors_system = 1;
 							ui_print("System\n");
+                        } else if (value2[i] == 'K' || value2[i] == 'k') {
+                            ors_custpack = 1;
+                            ui_print("Custpack\n");
 						} else if (value2[i] == 'D' || value2[i] == 'd') {
 							ors_data = 1;
 							ui_print("Data\n");
@@ -966,7 +971,7 @@ int run_script_file(void) {
 					}
 				} else
 					LOGI("No restore options set\n");
-				nandroid_restore(value1, ors_boot, ors_system, ors_data, ors_cache, ors_sdext, 0);
+				nandroid_restore(value1, ors_boot, ors_system, ors_custpack, ors_data, ors_cache, ors_sdext, 0);
 				ui_print("Restore complete!\n");
 			} else if (strcmp(command, "mount") == 0) {
 				// Mount

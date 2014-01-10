@@ -112,6 +112,94 @@ toggle_script_assert_check()
     ui_print("Script assert Check: %s\n", script_assert_enabled ? "Enabled" : "Disabled");
 }
 
+void toggle_touch_control_menu()
+{
+    if (ensure_path_mounted("/sdcard/") != 0) {
+        LOGE ("Can't mount sdcard\n");
+        return;
+    }
+
+    static const char* headers[] = {  "Toggle touch control type",
+                                "",
+                                "Selecting either full touch",
+                                "or touch Menu keys on bottom.",
+                                "",
+                                NULL
+    };
+
+    static char* list[] = { "",			//Toggle full touch 
+                            "",			//Toggle menu navigation
+                            "Disable all touch",
+                            NULL
+    };
+    
+    struct stat info;
+    if (0 != stat("/sdcard/clockworkmod/.full_nav", &info))
+    {
+    	list[0] = "Touch control - ON";
+    }
+    else if (0 == stat("/sdcard/clockworkmod/.full_nav", &info))
+    {
+    	list[0] = "Touch control - OFF";
+    }
+    if (0 == stat("/sdcard/clockworkmod/.menu_nav", &info))
+    	list[2] = "Menu control - OFF";
+    else if (0 != stat("/sdcard/clockworkmod/.menu_nav", &info))
+    	list[2] = "Menu control - ON";
+
+
+    int chosen_item = get_menu_selection(headers, list, 0, 0);
+    switch (chosen_item)
+    {
+        case 0:
+            {
+            	if (0 != stat("/sdcard/clockworkmod/.full_nav", &info))
+            	{
+		    	__system("touch /sdcard/clockworkmod/.full_nav");
+		    	ui_print("Full touch control disabled\n");
+		}
+		else if (0 == stat("/sdcard/clockworkmod/.full_nav", &info))
+		{
+		    	__system("rm /sdcard/clockworkmod/.full_nav");
+		    	ui_print("Full touch control enabled\n");
+		    	ui_print("Click on buttons on screen for selection.\n");
+		    	ui_print("Swipe left for Go Back.\n");
+		    	ui_print("Swipe right for Scroll Down.\n");
+		    	ui_print("Swipe left for Scroll Up.\n");
+		}
+		
+		toggle_touch_control_menu();
+            }
+            break;
+        case 1:
+            {
+            	if (0 != stat("/sdcard/clockworkmod/.menu_nav", &info))
+            	{
+		    	__system("touch /sdcard/clockworkmod/.menu_nav");
+		    	ui_print("Menu touch control disabled\n");
+		}
+		else if (0 == stat("/sdcard/clockworkmod/.menu_nav", &info))
+		{
+		    	__system("rm /sdcard/clockworkmod/.menu_nav");
+		    	ui_print("Menu touch control enabled\n");
+		    	ui_print("Use menu icons at bottom for navigation\n");
+		}
+		toggle_touch_control_menu();
+            }
+            break;
+        case 2:
+            {
+	    	__system("touch /sdcard/clockworkmod/.full_nav");
+	    	__system("touch /sdcard/clockworkmod/.menu_nav");
+	    	ui_print("All sorts of touch control disabled\n");
+	    	ui_print("Use Volume/Power keys to navigate.\n");
+		toggle_touch_control_menu();
+            }
+            break;
+    }
+    //ui_set_show_text(1);
+}
+
 int install_zip(const char* packagefilepath)
 {
     ui_print("\n-- Installing: %s\n", packagefilepath);
@@ -476,7 +564,7 @@ void show_nandroid_restore_menu(const char* path)
         return;
 
     if (confirm_selection("Confirm restore?", "Yes - Restore"))
-        nandroid_restore(file, 1, 1, 1, 1, 1, 0, 0);                   
+        nandroid_restore(file, 1, 1, 1, 1, 1, 1, 0, 0);                   
 }
 
 void show_nandroid_delete_menu(const char* path)
@@ -1189,18 +1277,19 @@ void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
 					NULL
     };
     
-    int backup_list [7];
-    char* list[7];
+    int backup_list [8];
+    char* list[8];
     
     backup_list[0] = 1;
     backup_list[1] = 1;
     backup_list[2] = 1;
     backup_list[3] = 1;
     backup_list[4] = 1;
-    backup_list[5] = NULL;
+    backup_list[5] = 1;
+    backup_list[6] = NULL;
     
-    list[5] = "Perform Backup";
-    list[6] = NULL;
+    list[6] = "Perform Backup";
+    list[7] = NULL;
     
     int cont = 1;
     for (;cont;) {
@@ -1218,16 +1307,21 @@ void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
     		list[2] = "Backup system: Yes";
 	    else
 	    	list[2] = "Backup system: No";
-
+	    	
 	    if (backup_list[3] == 1)
-	    	list[3] = "Backup data: Yes";
+    		list[3] = "Backup custpack: Yes";
 	    else
-	    	list[3] = "Backup data: No";
+	    	list[3] = "Backup custpack: No";	
 
 	    if (backup_list[4] == 1)
-	    	list[4] = "Backup cache: Yes";
+	    	list[4] = "Backup data: Yes";
 	    else
-	    	list[4] = "Backup cache: No";
+	    	list[4] = "Backup data: No";
+
+	    if (backup_list[5] == 1)
+	    	list[5] = "Backup cache: Yes";
+	    else
+	    	list[5] = "Backup cache: No";
 	    	
 	    int chosen_item = get_menu_selection (advancedheaders, list, 0, 0);
 	    switch (chosen_item) {
@@ -1241,15 +1335,17 @@ void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
 			case 3: backup_list[3] = !backup_list[3];
 				break;
 			case 4: backup_list[4] = !backup_list[4];
+				break;
+			case 5: backup_list[5] = !backup_list[5];
 				break;	
 		   
-			case 5: cont = 0;
+			case 6: cont = 0;
 				break;
 		}
 	}
 	
 	nandroid_generate_timestamp_path(path, other_sd);
-	return nandroid_advanced_backup(path, backup_list[0], backup_list[1], backup_list[2], backup_list[3], backup_list[4], backup_list[5]);
+	return nandroid_advanced_backup(path, backup_list[0], backup_list[1], backup_list[2], backup_list[3], backup_list[4], backup_list[5], backup_list[6]);
 }
 
 void show_nandroid_advanced_restore_menu(const char* path)
@@ -1281,6 +1377,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
 
     static char* list[] = { "Restore boot",
                             "Restore system",
+                            "Restore custpack",
                             "Restore data",
                             "Restore cache",
                             "Restore sd-ext",
@@ -1290,7 +1387,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
     
     if (0 != get_partition_device("wimax", tmp)) {
         // disable wimax restore option
-        list[5] = NULL;
+        list[6] = NULL;
     }
 
     static char* confirm_restore  = "Confirm restore?";
@@ -1300,27 +1397,31 @@ void show_nandroid_advanced_restore_menu(const char* path)
     {
         case 0:
             if (confirm_selection(confirm_restore, "Yes - Restore boot"))
-                nandroid_restore(file, 1, 0, 0, 0, 0, 0, 0);           
+                nandroid_restore(file, 1, 0, 0, 0, 0, 0, 0, 0);           
             break;
         case 1:
             if (confirm_selection(confirm_restore, "Yes - Restore system"))
-                nandroid_restore(file, 0, 1, 0, 0, 0, 0, 0);           
+                nandroid_restore(file, 0, 1, 0, 0, 0, 0, 0, 0);           
             break;
         case 2:
-            if (confirm_selection(confirm_restore, "Yes - Restore data"))
-                nandroid_restore(file, 0, 0, 1, 0, 0, 0, 0);           
+            if (confirm_selection(confirm_restore, "Yes - Restore custpack"))
+                nandroid_restore(file, 0, 0, 1, 0, 0, 0, 0, 0);           
             break;
         case 3:
-            if (confirm_selection(confirm_restore, "Yes - Restore cache"))
-                nandroid_restore(file, 0, 0, 0, 1, 0, 0, 0);            
+            if (confirm_selection(confirm_restore, "Yes - Restore data"))
+                nandroid_restore(file, 0, 0, 0, 1, 0, 0, 0, 0);           
             break;
         case 4:
-            if (confirm_selection(confirm_restore, "Yes - Restore sd-ext"))
-                nandroid_restore(file, 0, 0, 0, 0, 1, 0, 0);             
+            if (confirm_selection(confirm_restore, "Yes - Restore cache"))
+                nandroid_restore(file, 0, 0, 0, 0, 1, 0, 0, 0);            
             break;
         case 5:
+            if (confirm_selection(confirm_restore, "Yes - Restore sd-ext"))
+                nandroid_restore(file, 0, 0, 0, 0, 0, 1, 0, 0);             
+            break;
+        case 6:
             if (confirm_selection(confirm_restore, "Yes - Restore wimax"))
-                nandroid_restore(file, 0, 0, 0, 0, 0, 1, 0);  
+                nandroid_restore(file, 0, 0, 0, 0, 0, 0, 1, 0);  
             break;
     }
 }
@@ -1837,6 +1938,7 @@ void show_carliv_menu()
     };
 
     char* list[] = { "Aroma File Manager",
+                            "Toggle touch control",
                             "Instructions for touch control",
                             "About",	 	 
                              NULL
@@ -1878,16 +1980,21 @@ void show_carliv_menu()
                 ui_print("No clockworkmod/.aromafm/aromafm.zip on sdcards\n");
                 ui_print("Browsing custom locations\n");
                 custom_aroma_menu();
-                break;  
+                break;
              case 1:
+				toggle_touch_control_menu();
+                break;   
+             case 2:
                 ui_print("To control touch navigation menu touch on bottom's icons:\n");
                 ui_print("Go Back, Down, Up, Enter.\n");
+                ui_print("=================================\n");
+                ui_print("For full touch control, tap on desired menu button. For Go back swipe to the left. For Scroll UP and Scroll Down in long menu pages, Swipe to Right for Page Down, and Swipe to Left for Page UP, and on top of the menu Swipe Left for Go Back.\n");
                 ui_print("\n");
                 break;  
-             case 2:
+             case 3:
                 ui_print("This is a CWM based Recovery with touch screen support and Aroma File Manager capability.\n");
                 ui_print("Developed by carliv from xda with Clockworkmod v. 6.0.4.4 base.\n");
-                ui_print("With touch menu code from Vega Touch and Cannibal Open Touch recovery source, all modified and improved by carliv@xda.\n");
+                ui_print("With touch menu code from Vega Touch and Cannibal Open Touch recovery source, and full touch support module developed by Napstar-xda from UtterChaos Team, all modified and improved by carliv@xda.\n");
                 ui_print("For Aroma File Manager is recommended version 1.80 - Calung, from amarullz xda thread, because it has a full touch support in most of devices.\n");
                 ui_print("Thank you all!\n");
                 ui_print("\n");
@@ -1934,6 +2041,7 @@ void create_fstab()
     write_fstab_root("/datadata", file);
     write_fstab_root("/emmc", file);
     write_fstab_root("/system", file);
+    write_fstab_root("/custpack", file);
     write_fstab_root("/sdcard", file);
     write_fstab_root("/sd-ext", file);
     write_fstab_root("/external_sd", file);
@@ -1979,6 +2087,7 @@ void process_volumes() {
     ui_print("Checking for ext4 partitions...\n");
     int ret = 0;
     ret = bml_check_volume("/system");
+    ret |= bml_check_volume("/custpack");
     ret |= bml_check_volume("/data");
     if (has_datadata())
         ret |= bml_check_volume("/datadata");
@@ -2005,7 +2114,7 @@ void process_volumes() {
     ui_print("in case of error.\n");
 
     nandroid_backup(backup_path);
-    nandroid_restore(backup_path, 1, 1, 1, 1, 1, 0, 0);    
+    nandroid_restore(backup_path, 1, 1, 1, 1, 1, 1, 0, 0);    
     ui_set_show_text(0);
 }
 

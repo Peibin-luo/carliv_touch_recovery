@@ -398,7 +398,7 @@ int recalc_sdcard_space(const char* backup_path)
     return sdcard_free_mb;
 }
 
-int nandroid_advanced_backup(const char* backup_path, int boot, int recovery, int system, int data, int cache, int sdext)
+int nandroid_advanced_backup(const char* backup_path, int boot, int recovery, int system, int custpack, int data, int cache, int sdext)
 {
     ui_set_background(BACKGROUND_ICON_INSTALLING);
 
@@ -433,6 +433,9 @@ int nandroid_advanced_backup(const char* backup_path, int boot, int recovery, in
 
     if (system && 0 != (ret = nandroid_backup_partition(backup_path, "/system")))
         return ret;
+        
+    if (custpack && 0 != (ret = nandroid_backup_partition(backup_path, "/custpack")))
+            return ret;
 
     if (data && 0 != (ret = nandroid_backup_partition(backup_path, "/data")))
         return ret;
@@ -530,6 +533,9 @@ int nandroid_backup(const char* backup_path)
 
     if (0 != (ret = nandroid_backup_partition(backup_path, "/system")))
         return ret;
+        
+    if (0 != (ret = nandroid_backup_partition(backup_path, "/custpack")))
+            return ret;
 
     if (0 != (ret = nandroid_backup_partition(backup_path, "/data")))
         return ret;
@@ -869,7 +875,7 @@ int nandroid_restore_partition(const char* backup_path, const char* root) {
 }
 
 int nandroid_restore
-(const char* backup_path, int restore_boot, int restore_system, int restore_data, int restore_cache, int restore_sdext, int restore_wimax, int restore_uboot)
+(const char* backup_path, int restore_boot, int restore_system, int restore_custpack, int restore_data, int restore_cache, int restore_sdext, int restore_wimax, int restore_uboot)
 {
     ui_set_background(BACKGROUND_ICON_INSTALLING);
     ui_show_indeterminate_progress();
@@ -931,6 +937,9 @@ int nandroid_restore
     }
 
     if (restore_system && 0 != (ret = nandroid_restore_partition(backup_path, "/system")))
+        return ret;
+        
+    if (restore_custpack && 0 != (ret = nandroid_restore_partition(backup_path, "/custpack")))
         return ret;
 
     if (restore_data && 0 != (ret = nandroid_restore_partition(backup_path, "/data")))
@@ -1066,7 +1075,7 @@ int nandroid_main(int argc, char** argv)
     {
         if (argc != 3)
             return nandroid_usage();
-        return nandroid_restore(argv[2], 1, 1, 1, 1, 1, 0, 0);                  
+        return nandroid_restore(argv[2], 1, 1, 1, 1, 1, 1, 0, 0);                  
     }
     
     if (strcmp("dump", argv[1]) == 0)

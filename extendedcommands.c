@@ -514,7 +514,7 @@ void show_wipe_menu()
     };
 
     char* list[] = { "Wipe All Data - Preflash",
-                            "Wipe Data",
+                            "Wipe Data - Factory reset",
                             "Wipe Cache",
                             "Wipe Dalvik Cache",	 	 
                              NULL

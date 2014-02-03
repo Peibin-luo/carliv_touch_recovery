@@ -1343,11 +1343,11 @@ void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
 void show_nandroid_advanced_restore_menu(const char* path)
 {
     if (ensure_path_mounted(path) != 0) {
-        LOGE ("Can't mount sdcard\n");
+        LOGE ("Can't mount %s\n", path);
         return;
     }
 
-    static char* advancedheaders[] = {  "Choose an image to restore",
+    static char* advancedheaders[] = { "Choose an image to restore",
                                 "",
                                 "Choose an image to restore",
                                 "first. The next menu will",
@@ -1356,9 +1356,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
                                 NULL
     };
 
-    char tmp[PATH_MAX];
-    sprintf(tmp, "%s/clockworkmod/backup/", path);
-    char* file = choose_file_menu(tmp, NULL, advancedheaders);
+    char* file = choose_file_menu(path, NULL, advancedheaders);
     if (file == NULL)
         return;
 
@@ -1376,7 +1374,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
                             NULL
     };
     
-    if (0 != get_partition_device("wimax", tmp)) {
+    if (0 != get_partition_device("wimax", path)) {
         // disable wimax restore option
         list[5] = NULL;
     }

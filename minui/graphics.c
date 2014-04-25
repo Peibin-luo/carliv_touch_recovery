@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 
@@ -50,6 +51,8 @@
 #endif
 
 #define NUM_BUFFERS 2
+#define ALIGN(x, align) (((x) + ((align)-1)) & ~((align)-1))
+#define MAX_DISPLAY_DIM  2048
 
 typedef struct {
     GGLSurface texture;
@@ -57,8 +60,7 @@ typedef struct {
     unsigned cheight;
     unsigned ascent;
     int ts_x;
-    int ts_y;
-    int ts_touchY;    
+    int ts_y;    
 } GRFont;
 
 static GRFont *gr_font = 0;
@@ -77,36 +79,6 @@ static int gr_vt_fd = -1;
 
 static struct fb_var_screeninfo vi;
 static struct fb_fix_screeninfo fi;
-
-static int
-write_int(char const* path, int value)
-{
-    int fd;
-    static int already_warned = 0;
-
-    fd = open(path, O_RDWR);
-    if (fd >= 0) {
-        char buffer[20];
-        int bytes = sprintf(buffer, "%d\n", value);
-        int amt = write(fd, buffer, bytes);
-        close(fd);
-        return amt == -1 ? -1 : 0;
-    } else {
-        if (already_warned == 0) {
-            printf("write_int failed to open %s\n", path);
-            already_warned = 1;
-        }
-        return -1;
-    }
-}
-
-static int
-set_light_backlight(int brightness)
-{
-    int err = 0;
-    err = write_int("/sys/class/leds/lcd-backlight/brightness", brightness);
-    return err;
-}
 
 static int get_framebuffer(GGLSurface *fb)
 {
@@ -227,8 +199,9 @@ void gr_flip(void)
 {
     GGLContext *gl = gr_context;
 
-    /* swap front and back buffers */
-    gr_active_fb = (gr_active_fb + 1) & 1;
+        /* swap front and back buffers */
+        if (double_buffering)
+            gr_active_fb = (gr_active_fb + 1) & 1;
 
 #ifdef BOARD_HAS_FLIPPED_SCREEN
     /* flip buffer 180 degrees for devices with physicaly inverted screens */
@@ -272,7 +245,7 @@ void gr_font_size(int *x, int *y)
     *y = gr_font->cheight;
 }
 
-int gr_text(int x, int y, const char *s)
+int gr_text(int x, int y, const char *s, int bold)
 {
     GGLContext *gl = gr_context;
     GRFont *font = gr_font;
@@ -469,9 +442,21 @@ gr_pixel *gr_fb_data(void)
 
 void gr_fb_blank(bool blank)
 {
+#ifdef RECOVERY_LCD_BACKLIGHT_PATH
+    int fd;
+
+    fd = open(RECOVERY_LCD_BACKLIGHT_PATH, O_RDWR);
+    if (fd < 0) {
+        perror("cannot open LCD backlight");
+        return;
+    }
+    write(fd, blank ? "000" : "127", 3);
+    close(fd);
+#else
     int ret;
 
     ret = ioctl(gr_fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
     if (ret < 0)
         perror("ioctl(): blank");
+#endif
 }

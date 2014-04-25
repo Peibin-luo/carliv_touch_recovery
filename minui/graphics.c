@@ -442,7 +442,7 @@ gr_pixel *gr_fb_data(void)
 
 void gr_fb_blank(bool blank)
 {
-#ifdef RECOVERY_LCD_BACKLIGHT_PATH
+	#ifdef RECOVERY_LCD_BACKLIGHT_PATH
     int fd;
 
     fd = open(RECOVERY_LCD_BACKLIGHT_PATH, O_RDWR);

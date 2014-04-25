@@ -62,9 +62,6 @@ static int gShowBackButton = 0;
 #define resX gr_fb_width()		
 #define resY gr_fb_height()	
 
-//In this case MENU_SELECT icon has maximum possible height.
-#define MENU_MAX_HEIGHT gr_get_height(gMenuIcon[MENU_SELECT])		//Maximum allowed height for navigation icons
-
 #define BUTTON_MAX_ROWS (int)(0.8*resY/MENU_INCREMENT)		//80% of screen length is allowed to have menu buttons
 #define BUTTON_EQUIVALENT(x) (int)((x*CHAR_HEIGHT)/MENU_INCREMENT)		//Conversion of normal line to menu button icons
 
@@ -99,11 +96,9 @@ static gr_surface *gInstallationOverlay;
 static gr_surface *gProgressBarIndeterminate;
 static gr_surface gProgressBarEmpty;
 static gr_surface gProgressBarFill;
-static gr_surface gVirtualKeys;
 static gr_surface gBackground;
 static int ui_has_initialized = 0;
 static int ui_log_stdout = 1;
-static int selMenuIcon = 0;
 static int selMenuButtonIcon = -1;
 
 static int boardEnableKeyRepeat = 0;
@@ -115,14 +110,6 @@ static const struct { gr_surface* surface; const char *name; } BITMAPS[] = {
     { &gBackgroundIcon[BACKGROUND_ICON_CLOCKWORK],  "icon_clockwork" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_INSTALLING], "icon_firmware_install" },
     { &gBackgroundIcon[BACKGROUND_ICON_FIRMWARE_ERROR], "icon_firmware_error" },
-    { &gMenuIcon[MENU_BACK],     	"icon_back" },
-    { &gMenuIcon[MENU_DOWN],     	"icon_down" },
-    { &gMenuIcon[MENU_UP],       	"icon_up" },
-    { &gMenuIcon[MENU_SELECT],   	"icon_select" },
-    { &gMenuIcon[MENU_BACK_M],   	"icon_backM" },
-    { &gMenuIcon[MENU_DOWN_M],   	"icon_downM" },
-    { &gMenuIcon[MENU_UP_M],     	"icon_upM" },
-    { &gMenuIcon[MENU_SELECT_M], 	"icon_selectM" },
     { &gMenuIcon[MENU_BUTTON_L],    	"button_L" },
 	{ &gMenuIcon[MENU_BUTTON_L_SEL],	"button_L_sel" },
 	{ &gMenuIcon[MENU_BUTTON_R],    	"button_R" },
@@ -132,7 +119,6 @@ static const struct { gr_surface* surface; const char *name; } BITMAPS[] = {
 	{ &gMenuIcon[MENU_BUTTON_R_HALF],	"button_R_half" },
     { &gProgressBarEmpty,               "progress_empty" },
     { &gProgressBarFill,                "progress_fill" },
-    { &gVirtualKeys,                    "virtual_keys" },
     { &gBackground,                "stitch" },
     { NULL,                             NULL },
 };
@@ -168,7 +154,7 @@ static int menu_show_start = 0;             // this is line which menu display i
 static int menu_rows;
 static int max_menu_rows;
 
-static int cur_rainbow_color = 0;
+static unsigned cur_rainbow_color = 0;
 static int gRainbowMode = 0;
 
 // Key event input queue
@@ -312,22 +298,13 @@ static void draw_progress_locked()
     }
 }
 
-static void draw_virtualkeys_locked() {
-    gr_surface surface = gVirtualKeys;
-    int iconWidth = gr_get_width(surface);
-    int iconHeight = gr_get_height(surface);
-    int iconX = (gr_fb_width() - iconWidth) / 2;
-    int iconY = (gr_fb_height() - iconHeight);
-    gr_blit(surface, 0, 0, iconWidth, iconHeight, iconX, iconY);
-}
-
 static void draw_text_line(int row, const char* t, int rowOffset, int isMenu, int xOffset) {
   if (t[0] != '\0') {
 	if (ui_get_rainbow_mode()) ui_rainbow_mode(); 
     if (isMenu == 1)
-		gr_text(xOffset, rowOffset + (row+1)*MENU_INCREMENT-1+(MENU_HEIGHT/2), t);
+		gr_text(xOffset, rowOffset + (row+1)*MENU_INCREMENT-1+(MENU_HEIGHT/2), t, 0);
 	else 
-		gr_text(xOffset, rowOffset + (row+1)*CHAR_HEIGHT-1, t);	
+		gr_text(xOffset, rowOffset + (row+1)*CHAR_HEIGHT-1, t, 0);	
   }
 }
 
@@ -339,41 +316,25 @@ static void draw_text_line(int row, const char* t, int rowOffset, int isMenu, in
 // Should only be called with gUpdateMutex locked.
 static void draw_screen_locked(void)
 {
-	if (!ui_has_initialized) return;
-	
-//ToDo: Following structure should be global
-	struct { int x; int y; int xL; int xR; } MENU_ICON[] = {
-		{  get_menu_icon_info(MENU_BACK,MENU_ICON_X),	get_menu_icon_info(MENU_BACK,MENU_ICON_Y), get_menu_icon_info(MENU_BACK,MENU_ICON_XL), get_menu_icon_info(MENU_BACK,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_DOWN,MENU_ICON_X),	get_menu_icon_info(MENU_DOWN,MENU_ICON_Y), get_menu_icon_info(MENU_DOWN,MENU_ICON_XL), get_menu_icon_info(MENU_DOWN,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_UP,MENU_ICON_X),	get_menu_icon_info(MENU_UP,MENU_ICON_Y), get_menu_icon_info(MENU_UP,MENU_ICON_XL), get_menu_icon_info(MENU_UP,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_SELECT,MENU_ICON_X),	get_menu_icon_info(MENU_SELECT,MENU_ICON_Y), get_menu_icon_info(MENU_SELECT,MENU_ICON_XL), get_menu_icon_info(MENU_SELECT,MENU_ICON_XR) },
-	};
-  
+    if (!ui_has_initialized) return;
+    
     draw_background_locked(gCurrentIcon);
     draw_progress_locked();
 
     if (show_text) {
         // don't "disable" the background anymore with this...
-        gr_color(0, 0, 0, 80);
+        gr_color(0, 0, 0, 70);
         gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
-        int total_rows = (gr_fb_height() / CHAR_HEIGHT) - MIN_BLANK_ROWS;
+        int total_rows = gr_fb_height() / CHAR_HEIGHT;
         int i = 0;
         int j = 0;
 		int isMenu = 1;
 		int rowOffset = 0;
-        int row = 0;            // current row that we are drawing on
+        int row = 0;             // current row that we are drawing on
         if (show_menu) {
-			struct stat info;
-    		if (0 != stat("/sdcard/clockworkmod/.menu_nav", &info))
-    		{
-				draw_icon_locked(gMenuIcon[MENU_BACK], MENU_ICON[MENU_BACK].x, MENU_ICON[MENU_BACK].y );
-				draw_icon_locked(gMenuIcon[MENU_DOWN], MENU_ICON[MENU_DOWN].x, MENU_ICON[MENU_DOWN].y);
-				draw_icon_locked(gMenuIcon[MENU_UP], MENU_ICON[MENU_UP].x, MENU_ICON[MENU_UP].y );
-				draw_icon_locked(gMenuIcon[MENU_SELECT], MENU_ICON[MENU_SELECT].x, MENU_ICON[MENU_SELECT].y );
-			}
-			
-			gr_color(HEADER_TEXT_COLOR);                   
+
+            gr_color(HEADER_TEXT_COLOR);                   
             for (i = 0; i < menu_top; ++i) {
                 draw_text_line(i, menu[i], rowOffset, !isMenu, 0);
                 row++;
@@ -476,14 +437,11 @@ static void draw_screen_locked(void)
             draw_text_line(start_row + r, text[(cur_row + r) % MAX_ROWS], 0, !isMenu, 0);
         }
     }
-
-    draw_virtualkeys_locked();
-
 }
 
 // Redraw everything on the screen and flip the screen (make it visible).
 // Should only be called with gUpdateMutex locked.
-void update_screen_locked(void)
+static void update_screen_locked(void)
 {
     if (!ui_has_initialized) return;
     draw_screen_locked();
@@ -590,7 +548,7 @@ int device_handle_mouse(struct keyStruct *key, int visible)
 				}
 			}
 		}
-		else if((key->y < (resY - MENU_MAX_HEIGHT)) &&  (key->length < 0.1*resY))
+		else if((key->y < resY) &&  (key->length < 0.1*resY))
 		{
 			struct stat info;
 	    	if (0 != stat("/sdcard/clockworkmod/.full_nav", &info))
@@ -628,30 +586,6 @@ int device_handle_mouse(struct keyStruct *key, int visible)
 				}
 			}
 		}
-		else if((key->y > (resY - MENU_MAX_HEIGHT))  &&  (key->length < 0.1*resY))
-		{
-			struct stat info;
-	    	if (0 != stat("/sdcard/clockworkmod/.menu_nav", &info))
-	    	{
-					//ToDo: Following structure should be global
-				struct { int x; int y; int xL; int xR; } MENU_ICON[] = {
-					{  get_menu_icon_info(MENU_BACK,MENU_ICON_X),	get_menu_icon_info(MENU_BACK,MENU_ICON_Y), get_menu_icon_info(MENU_BACK,MENU_ICON_XL), get_menu_icon_info(MENU_BACK,MENU_ICON_XR) },
-					{  get_menu_icon_info(MENU_DOWN,MENU_ICON_X),	get_menu_icon_info(MENU_DOWN,MENU_ICON_Y), get_menu_icon_info(MENU_DOWN,MENU_ICON_XL), get_menu_icon_info(MENU_DOWN,MENU_ICON_XR) },
-					{  get_menu_icon_info(MENU_UP,MENU_ICON_X),	get_menu_icon_info(MENU_UP,MENU_ICON_Y), get_menu_icon_info(MENU_UP,MENU_ICON_XL), get_menu_icon_info(MENU_UP,MENU_ICON_XR) },
-					{  get_menu_icon_info(MENU_SELECT,MENU_ICON_X),	get_menu_icon_info(MENU_SELECT,MENU_ICON_Y), get_menu_icon_info(MENU_SELECT,MENU_ICON_XL), get_menu_icon_info(MENU_SELECT,MENU_ICON_XR) },
-				};
-				int position;
-				position = key->x;
-				if(position > MENU_ICON[MENU_BACK].xL && position < MENU_ICON[MENU_BACK].xR)
-					return GO_BACK;
-				else if(position > MENU_ICON[MENU_DOWN].xL && position < MENU_ICON[MENU_DOWN].xR)
-					return HIGHLIGHT_DOWN;
-				else if(position > MENU_ICON[MENU_UP].xL && position < MENU_ICON[MENU_UP].xR)
-					return HIGHLIGHT_UP;
-				else if(position > MENU_ICON[MENU_SELECT].xL && position < MENU_ICON[MENU_SELECT].xR)
-					return SELECT_ITEM;
-			}
-		}
 	}
 	return NO_ACTION;
 }
@@ -660,14 +594,6 @@ int device_handle_mouse(struct keyStruct *key, int visible)
 static void ui_handle_mouse_input(int* curPos)
 {
 	pthread_mutex_lock(&key_queue_mutex);
-
-//ToDo: Following structure should be global
-	struct { int x; int y; int xL; int xR; } MENU_ICON[] = {
-		{  get_menu_icon_info(MENU_BACK,MENU_ICON_X),	get_menu_icon_info(MENU_BACK,MENU_ICON_Y), get_menu_icon_info(MENU_BACK,MENU_ICON_XL), get_menu_icon_info(MENU_BACK,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_DOWN,MENU_ICON_X),	get_menu_icon_info(MENU_DOWN,MENU_ICON_Y), get_menu_icon_info(MENU_DOWN,MENU_ICON_XL), get_menu_icon_info(MENU_DOWN,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_UP,MENU_ICON_X),	get_menu_icon_info(MENU_UP,MENU_ICON_Y), get_menu_icon_info(MENU_UP,MENU_ICON_XL), get_menu_icon_info(MENU_UP,MENU_ICON_XR) },
-		{  get_menu_icon_info(MENU_SELECT,MENU_ICON_X),	get_menu_icon_info(MENU_SELECT,MENU_ICON_Y), get_menu_icon_info(MENU_SELECT,MENU_ICON_XL), get_menu_icon_info(MENU_SELECT,MENU_ICON_XR) },
-	};
 
   if (show_menu) {
     if (curPos[0] > 0) {
@@ -678,7 +604,7 @@ static void ui_handle_mouse_input(int* curPos)
 
 		pthread_mutex_lock(&gUpdateMutex);
 		struct stat info;
-		if(positionY < (resY - MENU_MAX_HEIGHT)) {
+		if(positionY < resY) {
 	    	if (0 != stat("/sdcard/clockworkmod/.full_nav", &info))
 			{
 				int j=0;
@@ -764,35 +690,6 @@ static void ui_handle_mouse_input(int* curPos)
 				}
 			}
 		}
-		else {
-	    	if (0 != stat("/sdcard/clockworkmod/.menu_nav", &info))
-	    	{
-				if(positionX > MENU_ICON[MENU_BACK].xL && positionX < MENU_ICON[MENU_BACK].xR) {
-					draw_icon_locked(gMenuIcon[selMenuIcon], MENU_ICON[selMenuIcon].x, MENU_ICON[selMenuIcon].y);
-					draw_icon_locked(gMenuIcon[MENU_BACK_M], MENU_ICON[MENU_BACK].x, MENU_ICON[MENU_BACK].y);
-					selMenuIcon = MENU_BACK;
-					gr_flip();
-				}
-				else if(positionX > MENU_ICON[MENU_DOWN].xL && positionX < MENU_ICON[MENU_DOWN].xR) {
-					draw_icon_locked(gMenuIcon[selMenuIcon], MENU_ICON[selMenuIcon].x, MENU_ICON[selMenuIcon].y);
-					draw_icon_locked(gMenuIcon[MENU_DOWN_M], MENU_ICON[MENU_DOWN].x, MENU_ICON[MENU_DOWN].y);
-					selMenuIcon = MENU_DOWN;
-					gr_flip();
-				}
-				else if(positionX > MENU_ICON[MENU_UP].xL && positionX < MENU_ICON[MENU_UP].xR) {
-					draw_icon_locked(gMenuIcon[selMenuIcon], MENU_ICON[selMenuIcon].x, MENU_ICON[selMenuIcon].y);
-					draw_icon_locked(gMenuIcon[MENU_UP_M], MENU_ICON[MENU_UP].x, MENU_ICON[MENU_UP].y);
-					selMenuIcon = MENU_UP;
-					gr_flip();
-				}
-				else if(positionX > MENU_ICON[MENU_SELECT].xL && positionX < MENU_ICON[MENU_SELECT].xR) {
-					draw_icon_locked(gMenuIcon[selMenuIcon], MENU_ICON[selMenuIcon].x, MENU_ICON[selMenuIcon].y);
-					draw_icon_locked(gMenuIcon[MENU_SELECT_M], MENU_ICON[MENU_SELECT].x, MENU_ICON[MENU_SELECT].y);
-					selMenuIcon = MENU_SELECT;
-					gr_flip();
-				}
-			}
-		}
 		key_queue_len_back = key_queue_len;
 		pthread_mutex_unlock(&gUpdateMutex);
      }
@@ -813,18 +710,21 @@ static int input_callback(int fd, short revents, void *data)
 
     ret = ev_get_input(fd, revents, &ev);
     if (ret)
-        return -1;       
+        return -1;
 
     if (ev.type == EV_SYN) {
         // end of a multitouch point
         if (ev.code == SYN_MT_REPORT) {
-			if (touchY > 0 && actPos.y < touchY) {
-				actPos.num = 0;
-				actPos.x = 0;
-				actPos.y = 0;
-				actPos.pressure = 0;
-				actPos.size = 0;
-			}
+			if (actPos.x != 0)
+				backupPos.x = actPos.x;
+			else
+				actPos.x = backupPos.x;
+				
+			if (actPos.y != 0)
+				backupPos.y = actPos.y;
+			else
+				actPos.y = backupPos.y;
+				
 			if (actPos.num>=0 && actPos.num<MAX_MT_POINTS) {
 				// create a fake keyboard event. We will use BTN_WHEEL, BTN_GEAR_DOWN and BTN_GEAR_UP key events to fake
 				// TOUCH_MOVE, TOUCH_DOWN and TOUCH_UP in this order
@@ -1002,7 +902,7 @@ static int input_callback(int fd, short revents, void *data)
     }
 
     if (ev.value > 0 && device_reboot_now(key_pressed, ev.code)) {
-        android_reboot(ANDROID_RB_RESTART, 0, 0);
+        reboot_main_system(ANDROID_RB_RESTART, 0, 0);
     }
 
     return 0;
@@ -1018,10 +918,9 @@ static void *input_thread(void *cookie)
     return NULL;
 }
 
-int i;
-
 void ui_init_icons(void) {
     int result;
+    int i;
     for (i = 0; BITMAPS[i].name != NULL; ++i) {
         int result = res_create_surface(BITMAPS[i].name, BITMAPS[i].surface);
         if (result < 0) {
@@ -1034,9 +933,6 @@ void ui_init(void)
 {
     ui_has_initialized = 1;
     gr_init();
-#ifdef BOARD_HAS_FLIPPED_SCREEN
-    gr_flip();
-#endif    
     ev_init(input_callback, NULL);
 
     text_col = text_row = 0;
@@ -1051,7 +947,7 @@ void ui_init(void)
     if (text_cols > MAX_COLS - 1) text_cols = MAX_COLS - 1;
 
     ui_init_icons();
-
+    int i;
     gProgressBarIndeterminate = malloc(ui_parameters.indeterminate_frames *
                                        sizeof(gr_surface));
     for (i = 0; i < ui_parameters.indeterminate_frames; ++i) {
@@ -1261,7 +1157,7 @@ void ui_print(const char *fmt, ...)
         text[text_row][text_col] = '\0';
         update_screen_locked();
     }
-    pthread_mutex_unlock(&gUpdateMutex); 
+    pthread_mutex_unlock(&gUpdateMutex);
 }
 
 void ui_printlogtail(int nb_lines) {
@@ -1288,9 +1184,9 @@ void ui_printlogtail(int nb_lines) {
 
 #define MENU_ITEM_HEADER "-"
 #define MENU_ITEM_HEADER_LENGTH strlen(MENU_ITEM_HEADER)
-#define ALLOWED_CHAR (int)(resX*0.45)/CHAR_WIDTH
+#define ALLOWED_CHAR (int)(resX*0.47)/CHAR_WIDTH
 
-int ui_start_menu(const char** headers, char** items, int initial_selection) {
+int ui_start_menu(char** headers, char** items, int initial_selection) {
     int i,j;
 	int remChar;
 	selMenuButtonIcon=0;
@@ -1298,7 +1194,7 @@ int ui_start_menu(const char** headers, char** items, int initial_selection) {
     if (text_rows > 0 && text_cols > 0) {
         for (i = 0; i < text_rows; ++i) {
             if (headers[i] == NULL) break;
-			remChar = (int)(resX - strlen(headers[i])*CHAR_WIDTH)/(CHAR_WIDTH*2);            //To centre align text from header
+			remChar = (int)(resX - strlen(headers[i])*CHAR_WIDTH)/(CHAR_WIDTH*2);  
 			for (j = 0; j < remChar; j++) {
 				strcpy(menu[i]+j, " ");
 			}
@@ -1308,29 +1204,28 @@ int ui_start_menu(const char** headers, char** items, int initial_selection) {
         menu_top = i;
         for (; i < MENU_MAX_ROWS; ++i) {
             if (items[i-menu_top] == NULL) break;
-            if (strlen(items[i-menu_top]) > ALLOWED_CHAR )			//Here "resX*0.4" is the maximum menu text length in each column.
-		{
-		    strcpy(menu[i], MENU_ITEM_HEADER);
-		    strncpy(menu[i] + MENU_ITEM_HEADER_LENGTH, items[i-menu_top], ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH);
-		    if(strlen(items[i-menu_top]) > (2*ALLOWED_CHAR - 1) )
-		    {
-			strncpy(submenu[i], items[i-menu_top] + ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH, ALLOWED_CHAR-3);
-			strcpy(submenu[i] + ALLOWED_CHAR-3, "..." );
-		    }
-		    else
-			strncpy(submenu[i], items[i-menu_top] + ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH, MENU_MAX_COLS-1 - MENU_ITEM_HEADER_LENGTH);
-		}
-		else
-		{
-			strncpy(menu[i], items[i-menu_top], MENU_MAX_COLS-1);
-		}
-            menu[i][MENU_MAX_COLS-1] = '\0';
+            if (strlen(items[i-menu_top]) > ALLOWED_CHAR )	
+			{
+			    strcpy(menu[i], MENU_ITEM_HEADER);
+			    strncpy(menu[i] + MENU_ITEM_HEADER_LENGTH, items[i-menu_top], ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH);
+			    if(strlen(items[i-menu_top]) > (2*ALLOWED_CHAR - 1) )
+			    {
+				strncpy(submenu[i], items[i-menu_top] + ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH, ALLOWED_CHAR-3);
+				strcpy(submenu[i] + ALLOWED_CHAR-3, "..." );
+			    }
+			    else
+				strncpy(submenu[i], items[i-menu_top] + ALLOWED_CHAR - MENU_ITEM_HEADER_LENGTH, MENU_MAX_COLS-1 - MENU_ITEM_HEADER_LENGTH);
+			}
+            else
+			{
+				strncpy(menu[i], items[i-menu_top], MENU_MAX_COLS-1);
+			}
+	            menu[i][MENU_MAX_COLS-1] = '\0';
         }
 
-//For time being, hardcoded gShowBackButton disable for UCtouch recovery
 		gShowBackButton = 0;
         if (gShowBackButton && !ui_root_menu) {
-            strcpy(menu[i], " <- Go Back ");
+            strcpy(menu[i], " <<<- Go Back ");
             ++i;
         }
 
@@ -1361,8 +1256,8 @@ int ui_menu_select(int sel) {
             menu_show_start = menu_sel;
         }
 
-        if (menu_sel - menu_show_start + menu_top >= max_menu_rows) {
-            menu_show_start = menu_sel + menu_top - max_menu_rows + 1;
+        if (menu_sel - menu_show_start + menu_top >= BUTTON_MAX_ROWS) {
+            menu_show_start = menu_sel + menu_top - BUTTON_MAX_ROWS + 1;
         }
 
         sel = menu_sel;
@@ -1443,40 +1338,47 @@ void ui_cancel_wait_key() {
     pthread_mutex_unlock(&key_queue_mutex);
 }
 
+#define REFRESH_TIME_USB_INTERVAL 5
 struct keyStruct *ui_wait_key()
 {
-    if (boardEnableKeyRepeat) return ui_wait_key_with_repeat();
+    if (boardEnableKeyRepeat){
+		key.code = ui_wait_key_with_repeat();
+		return &key;
+    }
     pthread_mutex_lock(&key_queue_mutex);
+    key.code = -1;
+    int timeouts = UI_WAIT_KEY_TIMEOUT_SEC;
 
-    // Time out after UI_WAIT_KEY_TIMEOUT_SEC, unless a USB cable is
-    // plugged in.
+    // Time out after REFRESH_TIME_USB_INTERVAL seconds to catch volume changes, and loop for
+    // UI_WAIT_KEY_TIMEOUT_SEC to restart a device not connected to USB
     do {
         struct timeval now;
         struct timespec timeout;
         gettimeofday(&now, NULL);
         timeout.tv_sec = now.tv_sec;
         timeout.tv_nsec = now.tv_usec * 1000;
-        timeout.tv_sec += UI_WAIT_KEY_TIMEOUT_SEC;
+        timeout.tv_sec += REFRESH_TIME_USB_INTERVAL;
 
         int rc = 0;
         while (key_queue_len == 0 && rc != ETIMEDOUT) {
             rc = pthread_cond_timedwait(&key_queue_cond, &key_queue_mutex,
                                         &timeout);
         }
-    } while (usb_connected() && key_queue_len == 0);
+        timeouts -= REFRESH_TIME_USB_INTERVAL;
+    } while ((timeouts > 0 || usb_connected()) && key_queue_len == 0);
 
     if (key_queue_len > 0) {
-		key.code = key_queue[0];
+        key.code = key_queue[0];
         memcpy(&key_queue[0], &key_queue[1], sizeof(int) * --key_queue_len);
     }
-
-	if((key.code == BTN_GEAR_UP || key.code == BTN_MOUSE) && !actPos.pressure && oldMousePos[actPos.num].pressure && key_queue_len_back != (key_queue_len -1))
+    
+    if((key.code == BTN_GEAR_UP || key.code == BTN_MOUSE) && !actPos.pressure && oldMousePos[actPos.num].pressure && key_queue_len_back != (key_queue_len -1))
 	{
 		key.code = ABS_MT_POSITION_X;
 		key.x = oldMousePos[actPos.num].x;
 		key.y = oldMousePos[actPos.num].y;
 	}
-
+ 
 	key.length = oldMousePos[actPos.num].length;
 	key.Xlength = oldMousePos[actPos.num].Xlength;
     pthread_mutex_unlock(&key_queue_mutex);
@@ -1502,20 +1404,26 @@ int ui_wait_key_with_repeat()
 
     // Loop to wait for more keys.
     do {
+        int timeouts = UI_WAIT_KEY_TIMEOUT_SEC;
+        int rc = 0;
         struct timeval now;
         struct timespec timeout;
-        gettimeofday(&now, NULL);
-        timeout.tv_sec = now.tv_sec;
-        timeout.tv_nsec = now.tv_usec * 1000;
-        timeout.tv_sec += UI_WAIT_KEY_TIMEOUT_SEC;
-
-        int rc = 0;
         pthread_mutex_lock(&key_queue_mutex);
-        while (key_queue_len == 0 && rc != ETIMEDOUT) {
-            rc = pthread_cond_timedwait(&key_queue_cond, &key_queue_mutex,
-                                        &timeout);
+        while (key_queue_len == 0 && timeouts > 0) {
+            gettimeofday(&now, NULL);
+            timeout.tv_sec = now.tv_sec;
+            timeout.tv_nsec = now.tv_usec * 1000;
+            timeout.tv_sec += REFRESH_TIME_USB_INTERVAL;
+
+            rc = 0;
+            while (key_queue_len == 0 && rc != ETIMEDOUT) {
+                rc = pthread_cond_timedwait(&key_queue_cond, &key_queue_mutex,
+                                            &timeout);
+            }
+            timeouts -= REFRESH_TIME_USB_INTERVAL;
         }
         pthread_mutex_unlock(&key_queue_mutex);
+
         if (rc == ETIMEDOUT && !usb_connected()) {
             keyVal = -1;
             return &key;
@@ -1609,7 +1517,6 @@ void ui_set_showing_back_button(int showBackButton) {
 }
 
 int ui_get_showing_back_button() {
-//For time being, hardcoded this to allow power button selection for UCtouch recovery
 //    return gShowBackButton;
     return 1;
 }
@@ -1653,7 +1560,7 @@ void ui_rainbow_mode() {
 
     gr_color(colors[cur_rainbow_color], colors[cur_rainbow_color+1], colors[cur_rainbow_color+2], 255);
     cur_rainbow_color += 3;
-    if (cur_rainbow_color >= sizeof(colors)/sizeof(colors[0])) cur_rainbow_color = 0;
+    if (cur_rainbow_color >= (sizeof(colors) / sizeof(colors[0]))) cur_rainbow_color = 0;
 }
 
 void ui_set_rainbow_mode(int rainbowMode) {

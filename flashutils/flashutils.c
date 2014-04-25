@@ -34,7 +34,11 @@ int device_flash_type()
 
 char* get_default_filesystem()
 {
+#ifdef USE_UBIFS	
     return device_flash_type() == MMC ? "ext3" : "ubifs";
+#else 
+    return device_flash_type() == MMC ? "ext3" : "yaffs2";
+#endif   
 }
 
 int get_flash_type(const char* partitionType) {
@@ -90,7 +94,7 @@ int backup_raw_partition(const char* partitionType, const char *partition, const
         case BML:
             return cmd_bml_backup_raw_partition(partition, filename);
         default:
-            printf("unable to detect device type\n");
+            printf("unable to detect device type");
             return -1;
     }
 }

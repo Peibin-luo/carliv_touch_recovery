@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 
@@ -50,6 +51,8 @@
 #endif
 
 #define NUM_BUFFERS 2
+#define ALIGN(x, align) (((x) + ((align)-1)) & ~((align)-1))
+#define MAX_DISPLAY_DIM  2048
 
 typedef struct {
     GGLSurface texture;
@@ -57,8 +60,7 @@ typedef struct {
     unsigned cheight;
     unsigned ascent;
     int ts_x;
-    int ts_y;
-    int ts_touchY;    
+    int ts_y;    
 } GRFont;
 
 static GRFont *gr_font = 0;
@@ -227,9 +229,9 @@ void gr_flip(void)
 {
     GGLContext *gl = gr_context;
 
-    /* swap front and back buffers */
-    if (double_buffering)
-        gr_active_fb = (gr_active_fb + 1) & 1;
+        /* swap front and back buffers */
+        if (double_buffering)
+            gr_active_fb = (gr_active_fb + 1) & 1;
 
 #ifdef BOARD_HAS_FLIPPED_SCREEN
     /* flip buffer 180 degrees for devices with physicaly inverted screens */
@@ -240,6 +242,7 @@ void gr_flip(void)
         gr_mem_surface.data[(vi.xres * vi.yres * 2) - i] = tmp;
     }
 #endif
+
 
     /* copy data from the in-memory surface to the buffer we're about
      * to make active. */
@@ -272,7 +275,7 @@ void gr_font_size(int *x, int *y)
     *y = gr_font->cheight;
 }
 
-int gr_text(int x, int y, const char *s)
+int gr_text(int x, int y, const char *s, int bold)
 {
     GGLContext *gl = gr_context;
     GRFont *font = gr_font;
@@ -469,9 +472,21 @@ gr_pixel *gr_fb_data(void)
 
 void gr_fb_blank(bool blank)
 {
+#ifdef RECOVERY_LCD_BACKLIGHT_PATH
+    int fd;
+
+    fd = open(RECOVERY_LCD_BACKLIGHT_PATH, O_RDWR);
+    if (fd < 0) {
+        perror("cannot open LCD backlight");
+        return;
+    }
+    write(fd, blank ? "000" : "127", 3);
+    close(fd);
+#else
     int ret;
 
     ret = ioctl(gr_fb_fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
     if (ret < 0)
         perror("ioctl(): blank");
+#endif
 }

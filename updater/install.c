@@ -53,7 +53,7 @@ static int UbiFormat(int type, const char* location);
 //
 //    fs_type="yaffs2" partition_type="MTD"     location=partition
 //    fs_type="ext4"   partition_type="EMMC"    location=device
-//    fs_type="ubifs"  partition_type="UBI"     location=partition
+//    fs_type="ubifs"  partition_type="UBI"	location=device
 Value* MountFn(const char* name, State* state, int argc, Expr* argv[]) {
     char* result = NULL;
     if (argc != 4) {
@@ -239,7 +239,7 @@ done:
 //
 //    fs_type="yaffs2" partition_type="MTD"     location=partition fs_size=<bytes> mount_point=<location>
 //    fs_type="ext4"   partition_type="EMMC"    location=device    fs_size=<bytes> mount_point=<location>
-//    fs_type="ubifs"  partition_type="UBI"     location=partition
+//    fs_type "ubifs"  partition_type="UBIFS"   location=device    fs_size=<bytes> mount_point=<localtion>
 //    if fs_size == 0, then make_ext4fs uses the entire partition.
 //    if fs_size > 0, that is the size to use
 //    if fs_size < 0, then reserve that many bytes at the end of the partition

@@ -40,28 +40,16 @@
 #define resY gr_fb_height()		//Value obtained from function 'gr_fb_height()'	
 
 
-/*
-	set the following value to restrict the touch boundaries so that
-	only the buttons are active instead of the full screen; set to 0
-	for full screen and debugging
- */
-int touchY=0;
-/*
-	define a storage limit for backup requirements, we recommend setting
-	this to something appropriate to your device
- */
-int minimum_storage=512; 
- 
 char* MENU_HEADERS[] = { NULL };
 
-char* MENU_ITEMS[] = { "Reboot the Phone",
+char* MENU_ITEMS[] = { "Power Menu",
                        "Install zip",
-                       "Wipe menu",
-                       "Backup and Restore",
-                       "Mounts and Storage",
-                       "Advanced",
+                       "Wipe Menu",
+                       "Backup/Restore",
+                       "Mounts/Storage",
+                       "Advanced Menu",
                        "Carliv",
-                       "Power off",
+                       "Reboot Phone",
                        NULL };
 
 void device_ui_init(UIParameters* ui_parameters) {
@@ -71,7 +59,19 @@ int device_recovery_start() {
     return 0;
 }
 
-int device_reboot_now(volatile char* key_pressed, int key_code) {
+int device_wipe_data() {
+    return 0;
+}
+
+int device_wipe_cache() {
+    return 0;
+}
+
+int device_wipe_dalvik_cache() {
+    return 0;
+}
+
+int device_wipe_all() {
     return 0;
 }
 
@@ -79,60 +79,16 @@ int device_perform_action(int which) {
     return which;
 }
 
-int device_wipe_data() {
-    return 0;
-}
+extern int device_reboot_now(volatile char* key_pressed, int key_code);
 
-int get_menu_icon_info(int indx1, int indx2) {
-//ToDo: Following switch case should be replaced by array or structure
+// call a clean reboot
+void reboot_main_system(int cmd, int flags, char *arg);
 
-int caseN = indx1*4 + indx2;
-
-switch (caseN) {
-	case 0:
-		return 1*resX/8;
-	case 1:
-		return (resY - MENU_MAX_HEIGHT()/2);
-	case 2:
-		return 0*resX/4;
-	case 3:
-		return 1*resX/4;
-	case 4:
-		return 3*resX/8;
-	case 5:
-		return (resY - MENU_MAX_HEIGHT()/2);
-	case 6:
-		return 1*resX/4;
-	case 7:
-		return 2*resX/4;
-	case 8:
-		return 5*resX/8;
-	case 9:
-		return (resY - MENU_MAX_HEIGHT()/2);
-	case 10:
-		return 2*resX/4;
-	case 11:
-		return 3*resX/4;
-	case 12:
-		return 7*resX/8;
-	case 13:
-		return (resY - MENU_MAX_HEIGHT()/2);
-	case 14:
-		return 3*resX/4;
-	case 15:
-		return 4*resX/4;
-
-}
-
-return 0;
-}
+int minimum_storage=512;
 
 //For those devices which has skewed X axis and Y axis detection limit (Not similar to XY resolution of device), So need normalization
 int MT_X(int fd, int x)
-{
-#ifdef RECOVERY_TOUCHSCREEN_FLIP_X
-    x = gr_fb_width() - x;
-#endif	
+{	
 	int abs_store[6] = {0};
 
   	ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), abs_store);
@@ -144,10 +100,7 @@ int MT_X(int fd, int x)
 }
 
 int MT_Y(int fd, int y)
-{
-#ifdef RECOVERY_TOUCHSCREEN_FLIP_Y
-    y = gr_fb_height() - y;
-#endif	
+{	
 	int abs_store[6] = {0};
    	
    	ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), abs_store);
@@ -156,9 +109,4 @@ int MT_Y(int fd, int y)
 	int out;
 	out = maxY ? (y*resY/maxY) : y;
 	return out;
-}
-
- int MENU_MAX_HEIGHT()
-{
-	return gr_get_height(gMenuIco[MENU_SELECT]);
 }

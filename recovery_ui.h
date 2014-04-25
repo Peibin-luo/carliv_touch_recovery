@@ -58,14 +58,6 @@ extern int device_handle_key(int key, int visible);
 // information to the screen.
 extern int device_perform_action(int which);
 
-// Called when we do a wipe data/factory reset operation (either via a
-// reboot from the main system with the --wipe_data flag, or when the
-// user boots into recovery manually and selects the option from the
-// menu.)  Can perform whatever device-specific wiping actions are
-// needed.  Return 0 on success.  The userdata and cache partitions
-// are erased after this returns (whether it returns success or not).
-int device_wipe_data();
-
 #define NO_ACTION           -1
 
 #define HIGHLIGHT_UP        -2
@@ -73,8 +65,7 @@ int device_wipe_data();
 #define SELECT_ITEM         -4
 #define GO_BACK             -5
 
-// main menu items for prompt_and_wait()
-#define ITEM_REBOOT          0
+#define ITEM_POWER           0
 #define ITEM_APPLY_EXT       1
 #define ITEM_APPLY_SDCARD    1  // historical synonym for ITEM_APPLY_EXT
 #define ITEM_APPLY_ZIP       1  // used for installing an update from a zip
@@ -84,8 +75,8 @@ int device_wipe_data();
 #define ITEM_NANDROID        3
 #define ITEM_PARTITION       4
 #define ITEM_ADVANCED        5
-#define ITEM_CARLIV	         6
-#define ITEM_POWEROFF        7
+#define ITEM_CARLIV          6
+#define ITEM_REBOOT          7
 
 // Header text to display above the main menu.
 extern char* MENU_HEADERS[];
@@ -93,21 +84,18 @@ extern char* MENU_HEADERS[];
 // Text of menu items.
 extern char* MENU_ITEMS[];
 
+#define POWER_ITEM_RECOVERY	    0
+#define POWER_ITEM_BOOTLOADER   1
+#define POWER_ITEM_POWEROFF	    2
+
 // Loosely track the depth of the current menu
 extern int ui_root_menu;
-
-#define MENU_ICON_X			0
-#define MENU_ICON_Y			1
-#define MENU_ICON_XL		2
-#define MENU_ICON_XR		3
 
 extern int resX;
 extern int resY;
 extern int maxX;
 extern int maxY;
-extern int touchY;
 
-int get_menu_icon_info(int indx1, int indx2);
 extern gr_surface *gMenuIco;
 
 int
@@ -121,23 +109,7 @@ static void update_screen_locked(void);
 
 extern int ui_handle_key(int key, int visible);
 
-extern int backupprompt;
-extern int orswipeprompt;
-extern int orsreboot;
-extern int orscallback;
-
-int erase_volume(const char *volume);
-
-void wipe_data(int confirm);
-
-void erase_cache(int orscallback);
-
-void erase_dalvik_cache(int orscallback);
-
-void wipe_all(int orscallback);
-
-extern const char *DEFAULT_BACKUP_PATH;
-extern const char *USER_DEFINED_BACKUP_MARKER;
+extern const char *DEFAULT_PATH;
 
 // call a clean reboot
 void reboot_main_system(int cmd, int flags, char *arg);

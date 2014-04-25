@@ -53,7 +53,7 @@ void ui_increment_frame();
 // Display some header text followed by a menu of items, which appears
 // at the top of the screen (in place of any scrolling ui_print()
 // output, if necessary).
-int ui_start_menu(const char** headers, char** items, int initial_selection);
+int ui_start_menu(char** headers, char** items, int initial_selection);
 // Set the menu highlight to the given index, and return it (capped to
 // the range [0..numitems).
 int ui_menu_select(int sel);
@@ -84,14 +84,6 @@ enum {
 
 //Stuff related to touch menu buttons
 enum {
-  MENU_BACK,
-  MENU_DOWN,
-  MENU_UP,
-  MENU_SELECT,
-  MENU_BACK_M,
-  MENU_DOWN_M,
-  MENU_UP_M,
-  MENU_SELECT_M,
   MENU_BUTTON_R,
   MENU_BUTTON_R_SEL,
   MENU_BUTTON_L,
@@ -213,6 +205,6 @@ extern int backupfmt;
 #define EMMC 1
 #define EXTERNALSD 2
 
-extern int OTHER_SD_CARD;
+extern int EXTRA_SDCARD;
 
 #endif  // RECOVERY_COMMON_H

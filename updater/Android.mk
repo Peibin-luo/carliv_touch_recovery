@@ -75,6 +75,11 @@ $(inc) : $(inc_dep_file)
 $(call intermediates-dir-for,EXECUTABLES,updater)/updater.o : $(inc)
 LOCAL_C_INCLUDES += $(dir $(inc))
 
+ifeq ($(TARGET_USERIMAGES_USE_UBIFS), true)
+LOCAL_CFLAGS += -DUSE_UBIFS
+LOCAL_C_INCLUDES += bootable/recovery/ubi/include
+endif
+
 inc :=
 inc_dep_file :=
 

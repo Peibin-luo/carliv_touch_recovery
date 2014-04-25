@@ -25,16 +25,13 @@ void ui_init();
 
 // Use KEY_* codes from <linux/input.h> or KEY_DREAM_* from "minui/minui.h".
 void ui_cancel_wait_key();
-struct keyStruct *ui_wait_key();    // waits for a key/button press, returns the code
+int ui_wait_key();            // waits for a key/button press, returns the code
 int ui_wait_key_with_repeat();
-int ui_key_pressed(struct keyStruct *key);  // returns >0 if the code is currently pressed
+int ui_key_pressed(int key);  // returns >0 if the code is currently pressed
 int ui_text_visible();        // returns >0 if text log is currently visible
 int ui_text_ever_visible();   // returns >0 if text log was ever visible
 void ui_show_text(int visible);
 void ui_clear_key_queue();
-
-// handle the user input events (mainly the touch events) inside the ui handler
-int device_handle_mouse(struct keyStruct *key, int visible);
 
 // Write a message to the on-screen log shown with Alt-L (also to stderr).
 // The screen is small, and users may need to report these messages to support,
@@ -53,7 +50,7 @@ void ui_increment_frame();
 // Display some header text followed by a menu of items, which appears
 // at the top of the screen (in place of any scrolling ui_print()
 // output, if necessary).
-int ui_start_menu(const char** headers, char** items, int initial_selection);
+int ui_start_menu(char** headers, char** items, int initial_selection);
 // Set the menu highlight to the given index, and return it (capped to
 // the range [0..numitems).
 int ui_menu_select(int sel);
@@ -77,42 +74,10 @@ enum {
   BACKGROUND_ICON_INSTALLING,
   BACKGROUND_ICON_ERROR,
   BACKGROUND_ICON_CLOCKWORK,
-  BACKGROUND_ICON_CID,
   BACKGROUND_ICON_FIRMWARE_INSTALLING,
   BACKGROUND_ICON_FIRMWARE_ERROR,
   NUM_BACKGROUND_ICONS
 };
-
-//Stuff related to touch menu buttons
-enum {
-  MENU_BACK,
-  MENU_DOWN,
-  MENU_UP,
-  MENU_SELECT,
-  MENU_BACK_M,
-  MENU_DOWN_M,
-  MENU_UP_M,
-  MENU_SELECT_M,
-  MENU_BUTTON_R,
-  MENU_BUTTON_R_SEL,
-  MENU_BUTTON_L,
-  MENU_BUTTON_L_SEL,
-  MENU_BUTTON_L_LOWHALF,
-  MENU_BUTTON_R_LOWHALF,
-  MENU_BUTTON_R_HALF,
-  MENU_TITLE_BGK,
-  NUM_MENU_ICON
-};
-
-//Struct to return key events to recovery.c through ui_wait_key()
-struct keyStruct{
-	int code;
-	int x;
-	int y;
-	int length;
-	int Xlength;
-};
-
 void ui_set_background(int icon);
 
 // Get a malloc'd copy of the screen image showing (only) the specified icon.
@@ -137,9 +102,6 @@ void ui_show_indeterminate_progress();
 
 // Hide and reset the progress bar.
 void ui_reset_progress();
-
-// Redraw the entire screen for the purpose of resetting our icons
-void ui_reset_icons();
 
 #define LOGE(...) ui_print("E:" __VA_ARGS__)
 #define LOGW(...) fprintf(stdout, "W:" __VA_ARGS__)
@@ -215,6 +177,6 @@ extern int backupfmt;
 #define EMMC 1
 #define EXTERNALSD 2
 
-extern int OTHER_SD_CARD;
+extern int EXTRA_SDCARD;
 
 #endif  // RECOVERY_COMMON_H

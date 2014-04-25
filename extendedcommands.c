@@ -40,14 +40,14 @@
 #include "mtdutils/mtdutils.h"
 #include "bmlutils/bmlutils.h"
 #include "cutils/android_reboot.h"
+#include "mmcutils/mmcutils.h"
 
 #include "adb_install.h"
-
-#define ABS_MT_POSITION_X 0x35  /* Center X ellipse position */
 
 int backupfmt = NULL;
 int signature_check_enabled = 1;
 int script_assert_enabled = 1;
+int md5_check_enabled = 0;
 static const char *SDCARD_UPDATE_FILE = "/sdcard/update.zip";
 int t;
 
@@ -112,6 +112,64 @@ toggle_script_assert_check()
     ui_print("Script assert Check: %s\n", script_assert_enabled ? "Enabled" : "Disabled");
 }
 
+void
+toggle_md5_check()
+{
+    md5_check_enabled = !md5_check_enabled;
+    ui_print("md5 Check: %s\n", md5_check_enabled ? "Enabled" : "Disabled");
+}
+
+void show_power_menu() {
+	static char* headers[] = { "Power Options",
+                                "",
+                                NULL
+    };
+ 
+    static char* list[] = { "Reboot Recovery",
+                            "Reboot to Bootloader",
+                            "Power Off",
+                            NULL
+    };
+	
+	char bootloader_mode[PROPERTY_VALUE_MAX];
+    property_get("ro.bootloader.mode", bootloader_mode, "");
+    if (!strcmp(bootloader_mode, "download")) {
+        list[1] = "Reboot to Download";
+    }
+    
+	for (;;) 
+	{
+		int chosen_item = get_menu_selection(headers, list, 0, 0);
+		if (chosen_item == GO_BACK)
+            break;
+		switch (chosen_item) {	
+			case POWER_ITEM_RECOVERY:
+			{
+                ui_print("Rebooting recovery...\n");
+                reboot_main_system(ANDROID_RB_RESTART2, 0, "recovery");
+                break;
+            }
+			case POWER_ITEM_BOOTLOADER:
+			{
+                if (!strcmp(bootloader_mode, "download")) {
+                    ui_print("Rebooting to download mode...\n");
+                    reboot_main_system(ANDROID_RB_RESTART2, 0, "download");
+                } else {
+                    ui_print("Rebooting to bootloader...\n");
+                    reboot_main_system(ANDROID_RB_RESTART2, 0, "bootloader");
+                }
+                break;
+            }	
+			case POWER_ITEM_POWEROFF:
+			{
+                ui_print("Shutting down...\n");
+                reboot_main_system(ANDROID_RB_POWEROFF, 0, 0);
+                break;
+            }
+		}
+	}
+}
+
 int install_zip(const char* packagefilepath)
 {
     ui_print("\n-- Installing: %s\n", packagefilepath);
@@ -127,7 +185,6 @@ int install_zip(const char* packagefilepath)
     }
     ui_set_background(BACKGROUND_ICON_NONE);
     ui_print("\nInstall from sdcard complete.\n");
-    ui_init_icons();
     return 0;
 }
 
@@ -195,6 +252,49 @@ void show_install_update_menu()
         }
 
     }
+}
+
+void show_wipe_menu()
+{
+
+    static char* headers[] = {  "Wipe Menu",
+								"",
+								NULL
+    };
+
+    char* list[] = { "Wipe Data - Factory Reset",
+                            "Wipe Cache",
+                            "Wipe Dalvik Cache",
+                            "Wipe All Data - Preflash",	 	 
+                             NULL
+    };
+
+    for (;;)
+    {
+		int chosen_item = get_menu_selection(headers, list, 0, 0);
+        if (chosen_item == GO_BACK)
+            break;
+		switch (chosen_item)
+        	{
+             case 0:
+				wipe_data(ui_text_visible());
+                if (!ui_text_visible()) return;
+                break;   
+             case 1:
+                wipe_cache(ui_text_visible());
+                if (!ui_text_visible()) return;
+                break;  
+             case 2:
+                wipe_dalvik_cache(ui_text_visible());
+                if (!ui_text_visible()) return;
+                break;
+             case 3:
+                wipe_all(ui_text_visible());
+                if (!ui_text_visible()) return;
+                break;   
+        }
+    }
+    
 }
 
 void free_string_array(char** array)
@@ -287,7 +387,7 @@ char** gather_files(const char* directory, const char* fileExtensionOrDirectory,
     }
 
     if(closedir(dir) < 0) {
-        LOGE("Failed to close directory.\n");
+        LOGE("Failed to close directory.");
     }
 
     if (total==0) {
@@ -311,8 +411,6 @@ char** gather_files(const char* directory, const char* fileExtensionOrDirectory,
 
     return files;
 }
-
-static int no_files_found = 1;
 
 // pass in NULL for fileExtensionOrDirectory and you will get a directory chooser
 char* choose_file_menu(const char* directory, const char* fileExtensionOrDirectory, const char* headers[])
@@ -417,46 +515,6 @@ void show_choose_zip_menu(const char *mount_point)
         install_zip(file);
 }
 
-void show_wipe_menu()
-{
-
-    static char* headers[] = {  "Wipe Menu",
-								"",
-								NULL
-    };
-
-    char* list[] = { "Wipe All Data - Preflash",
-                            "Wipe Data",
-                            "Wipe Cache",
-                            "Wipe Dalvik Cache",	 	 
-                             NULL
-    };
-
-    for (;;)
-    {
-		int chosen_item = get_menu_selection(headers, list, 0, 0);
-        if (chosen_item == GO_BACK)
-            break;
-		switch (chosen_item)
-        	{
-			case 0:
-                wipe_all(0);
-				break;
-             case 1:
-				wipe_data(ui_text_visible());
-                if (!ui_text_visible()) return;
-                break;   
-             case 2:
-                erase_cache(NULL);
-                break;  
-             case 3:
-                erase_dalvik_cache(NULL);
-                break;
-        }
-    }
-    
-}
-
 void show_nandroid_restore_menu(const char* path)
 {
     if (ensure_path_mounted(path) != 0) {
@@ -469,14 +527,12 @@ void show_nandroid_restore_menu(const char* path)
                                 NULL
     };
 
-    char tmp[PATH_MAX];
-    sprintf(tmp, "%s/clockworkmod/backup/", path);
-    char* file = choose_file_menu(tmp, NULL, headers);
+    char* file = choose_file_menu(path, NULL, headers);
     if (file == NULL)
         return;
 
     if (confirm_selection("Confirm restore?", "Yes - Restore"))
-        nandroid_restore(file, 1, 1, 1, 1, 1, 0, 0);                   
+        nandroid_restore(file, 1, 1, 1, 1, 1, 0);
 }
 
 void show_nandroid_delete_menu(const char* path)
@@ -491,9 +547,7 @@ void show_nandroid_delete_menu(const char* path)
                                 NULL
     };
 
-    char tmp[PATH_MAX];
-    sprintf(tmp, "%s/clockworkmod/backup/", path);
-    char* file = choose_file_menu(tmp, NULL, headers);
+    char* file = choose_file_menu(path, NULL, headers);
     if (file == NULL)
         return;
 
@@ -509,7 +563,7 @@ void show_nandroid_delete_menu(const char* path)
     }
 }
 
-int show_choose_delete_menu()
+int show_choose_delete_menu() 
 {
     static char *CHOOSE_DELETE_MENU_ITEMS[] = { "View and delete backups on /sdcard",
                                                 NULL,
@@ -524,9 +578,9 @@ int show_choose_delete_menu()
                                NULL
     };
 
-    if(strcasecmp(OTHER_SD_CARD,"/emmc")) {
+    if(strcasecmp(EXTRA_SDCARD,"/emmc")) {
         CHOOSE_DELETE_MENU_ITEMS[1]="View and delete backups on /emmc";
-    } else if(strcasecmp(OTHER_SD_CARD,"/external_sd")) {
+    } else if(strcasecmp(EXTRA_SDCARD,"/external_sd")) {
         CHOOSE_DELETE_MENU_ITEMS[1]="View and delete backups on /external_sd";
     }
 
@@ -570,7 +624,7 @@ int show_lowspace_menu(int i, const char* backup_path)
                                             NULL,
 											NULL };
 
-	#define ITEM_CONTINUE_BACKUP 0
+	#define ITEM_CONTINUE_BACKUP     0
 	#define ITEM_VIEW_DELETE_BACKUPS 1
     #define ITEM_FREE_DATA_OR_CANCEL 2
 
@@ -600,7 +654,7 @@ int show_lowspace_menu(int i, const char* backup_path)
 				return 0;
 			}
 			case ITEM_VIEW_DELETE_BACKUPS: {
-                if(OTHER_SD_CARD) {
+                if(EXTRA_SDCARD) {
                     show_choose_delete_menu();
                 } else {
                     char base_path[PATH_MAX];
@@ -615,8 +669,8 @@ int show_lowspace_menu(int i, const char* backup_path)
                     return 1;
                 }
                 char *other_sd = NULL;
-                if(OTHER_SD_CARD) {
-                    switch(OTHER_SD_CARD) {
+                if(EXTRA_SDCARD) {
+                    switch(EXTRA_SDCARD) {
                         case EMMC:
                             other_sd = "/emmc";
                             break;
@@ -914,16 +968,6 @@ int format_device(const char *device, const char *path, const char *fs_type) {
         return 0;
     }
 
-#ifdef USE_F2FS
-    if (strcmp(fs_type, "f2fs") == 0) {
-        int result = make_f2fs_main(device, v->mount_point);
-        if (result != 0) {
-            LOGE("format_volume: mkfs.f2f2 failed on %s\n", device);
-            return -1;
-        }
-        return 0;
-    }
-#endif
     return format_unknown_device(device, path, fs_type);
 }
 
@@ -1025,7 +1069,7 @@ int is_safe_to_format(char* name)
 {
     char str[255];
     char* partition;
-    property_get("ro.cwm.forbid_format", str, "/misc,/radio,/bootloader,/recovery,/efs,/wimax");
+    property_get("ro.cwm.forbid_format", str, "/misc,/nvram,/radio,/bootloader,/recovery,/efs,/wimax");
 
     partition = strtok(str, ", ");
     while (partition != NULL) {
@@ -1179,7 +1223,8 @@ void show_partition_menu()
     free(format_menu);
 }
 
-void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
+void show_nandroid_advanced_backup_menu(const char *path, int other_sd)
+{
 	if (ensure_path_mounted(path) != 0) {
 		LOGE ("Can't mount %s\n", path);
 		return;
@@ -1255,7 +1300,7 @@ void show_nandroid_advanced_backup_menu(const char *path, int other_sd) {
 void show_nandroid_advanced_restore_menu(const char* path)
 {
     if (ensure_path_mounted(path) != 0) {
-        LOGE ("Can't mount sdcard\n");
+        LOGE ("Can't mount %s\n", path);
         return;
     }
 
@@ -1268,9 +1313,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
                                 NULL
     };
 
-    char tmp[PATH_MAX];
-    sprintf(tmp, "%s/clockworkmod/backup/", path);
-    char* file = choose_file_menu(tmp, NULL, advancedheaders);
+    char* file = choose_file_menu(path, NULL, advancedheaders);
     if (file == NULL)
         return;
 
@@ -1288,7 +1331,7 @@ void show_nandroid_advanced_restore_menu(const char* path)
                             NULL
     };
     
-    if (0 != get_partition_device("wimax", tmp)) {
+    if (0 != get_partition_device("wimax", path)) {
         // disable wimax restore option
         list[5] = NULL;
     }
@@ -1300,27 +1343,27 @@ void show_nandroid_advanced_restore_menu(const char* path)
     {
         case 0:
             if (confirm_selection(confirm_restore, "Yes - Restore boot"))
-                nandroid_restore(file, 1, 0, 0, 0, 0, 0, 0);           
+                nandroid_restore(file, 1, 0, 0, 0, 0, 0);
             break;
         case 1:
             if (confirm_selection(confirm_restore, "Yes - Restore system"))
-                nandroid_restore(file, 0, 1, 0, 0, 0, 0, 0);           
+                nandroid_restore(file, 0, 1, 0, 0, 0, 0);
             break;
         case 2:
             if (confirm_selection(confirm_restore, "Yes - Restore data"))
-                nandroid_restore(file, 0, 0, 1, 0, 0, 0, 0);           
+                nandroid_restore(file, 0, 0, 1, 0, 0, 0);
             break;
         case 3:
             if (confirm_selection(confirm_restore, "Yes - Restore cache"))
-                nandroid_restore(file, 0, 0, 0, 1, 0, 0, 0);            
+                nandroid_restore(file, 0, 0, 0, 1, 0, 0);
             break;
         case 4:
             if (confirm_selection(confirm_restore, "Yes - Restore sd-ext"))
-                nandroid_restore(file, 0, 0, 0, 0, 1, 0, 0);             
+                nandroid_restore(file, 0, 0, 0, 0, 1, 0);
             break;
         case 5:
             if (confirm_selection(confirm_restore, "Yes - Restore wimax"))
-                nandroid_restore(file, 0, 0, 0, 0, 0, 1, 0);  
+                nandroid_restore(file, 0, 0, 0, 0, 0, 1);
             break;
     }
 }
@@ -1355,7 +1398,7 @@ static void choose_default_backup_format() {
             ui_print("Default backup format set to tar.\n");
             break;
         case 1:
-            backupfmt = 2;
+            backupfmt = 1;
             write_string_to_file(NANDROID_BACKUP_FORMAT_FILE, "dup");
             ui_print("Default backup format set to dedupe.\n");
             break;
@@ -1371,6 +1414,8 @@ void show_nandroid_advanced_menu()
 
     char* list[] = {"Advanced Backup",
                             "Advanced Restore",
+                            NULL,
+                            NULL,
                             NULL
     };
     
@@ -1435,10 +1480,10 @@ void show_nandroid_menu()
 
     char* list[] = { "Backup",
                             "Restore",
-                            "Delete",
+                            "Delete Old Backups",
                             "Advanced Backup Restore",
-                            "Free Unused Old Data",
                             "Default backup format",
+                            NULL,
                             NULL,
                             NULL,
                             NULL,
@@ -1447,19 +1492,20 @@ void show_nandroid_menu()
                             NULL,
                             NULL
     };
+    
+    if(!backupfmt) list[5] = "Free Unused Old Data";
 
     char *other_sd = NULL;
-    if (volume_for_path("/emmc") != NULL) {
-        other_sd = "/emmc";
-        list[6] = "Backup to internal_sd";
-        list[7] = "Restore from internal_sd";
-        list[8] = "Delete from internal_sd";
-    }
-    else if (volume_for_path("/external_sd") != NULL) {
-        other_sd = "/external_sd";
-        list[6] = "Backup to external_sd";
-        list[7] = "Restore from external_sd";
-        list[8] = "Delete from external_sd";
+    if(EXTRA_SDCARD == EMMC) {
+		list[6] = "Backup to internal sdcard";
+		list[7] = "Restore from internal sdcard";
+		list[8] = "Delete from internal sdcard";
+		other_sd = "/emmc";
+	} else if (EXTRA_SDCARD == EXTERNALSD) {
+		list[6] = "Backup to external sdcard";
+		list[7] = "Restore from external sdcard";
+		list[8] = "Delete from external sdcard";
+		other_sd = "/external_sd";
     }
 #ifdef RECOVERY_EXTEND_NANDROID_MENU
     extend_nandroid_menu(list, 9, sizeof(list) / sizeof(char*));
@@ -1471,81 +1517,53 @@ void show_nandroid_menu()
             break;
         switch (chosen_item)
         {
+			char backup_path[PATH_MAX];
             case 0:
                 {
-                    char backup_path[PATH_MAX];
-                    time_t t = time(NULL);
-                    struct tm *tmp = localtime(&t);
-                    if (tmp == NULL)
-                    {
-                        struct timeval tp;
-                        gettimeofday(&tp, NULL);
-                        sprintf(backup_path, "/sdcard/clockworkmod/backup/%d", tp.tv_sec);
-                    }
-                    else
-                    {
-                        strftime(backup_path, sizeof(backup_path), "/sdcard/clockworkmod/backup/%F.%H.%M.%S", tmp);
-                    }
+					nandroid_generate_timestamp_path(backup_path, 0);
                     nandroid_backup(backup_path);
+					break;
                 }
-                break;
             case 1:
-                show_nandroid_restore_menu("/sdcard");
-                break;
+                {
+					nandroid_get_backup_path(backup_path, 0);
+                	show_nandroid_restore_menu(backup_path);
+                	break;
+				}
             case 2:
-                show_nandroid_delete_menu("/sdcard");
-                break;
+                {
+					nandroid_get_backup_path(backup_path, 0);
+                	show_nandroid_delete_menu(backup_path);
+                	break;
+				}
             case 3:
                 show_nandroid_advanced_menu();
                 break;
             case 4:
-                run_dedupe_gc(other_sd);
+                choose_default_backup_format();
                 break;
             case 5:
-                choose_default_backup_format();
+                run_dedupe_gc(other_sd);
                 break;
             case 6:
                 {
-                    char backup_path[PATH_MAX];
-                    time_t t = time(NULL);
-                    struct tm *timeptr = localtime(&t);
-                    if (timeptr == NULL)
-                    {
-                        struct timeval tp;
-                        gettimeofday(&tp, NULL);
-                        if (other_sd != NULL) {
-                            sprintf(backup_path, "%s/clockworkmod/backup/%d", other_sd, tp.tv_sec);
-                        }
-                        else {
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        if (other_sd != NULL) {
-                            char tmp[PATH_MAX];
-                            strftime(tmp, sizeof(tmp), "clockworkmod/backup/%F.%H.%M.%S", timeptr);
-                            // this sprintf results in:
-                            // /emmc/clockworkmod/backup/%F.%H.%M.%S (time values are populated too)
-                            sprintf(backup_path, "%s/%s", other_sd, tmp);
-                        }
-                        else {
-                            break;
-                        }
-                    }
+					nandroid_generate_timestamp_path(backup_path, 1);
                     nandroid_backup(backup_path);
+					break;
                 }
-                break;
             case 7:
                 if (other_sd != NULL) {
-                    show_nandroid_restore_menu(other_sd);
+					nandroid_get_backup_path(backup_path, 1);
+                    show_nandroid_restore_menu(backup_path);
                 }
                 break;
             case 8:
                 if (other_sd != NULL) {
-                    show_nandroid_delete_menu(other_sd);
+					nandroid_get_backup_path(backup_path, 1);
+                    show_nandroid_delete_menu(backup_path);
                 }
                 break;
+                    
             default:
 #ifdef RECOVERY_EXTEND_NANDROID_MENU
                 handle_nandroid_menu(9, chosen_item);
@@ -1619,11 +1637,6 @@ int can_partition(const char* volume) {
         return 0;
     }
 
-    if (!is_safe_to_format(volume)) {
-		LOGI("Can't partition, format forbidden on: %s\n", volume);
-		return 0;
-	}
-
     int vol_len = strlen(vol->device);
     // do not allow partitioning of a device that isn't mmcblkX or mmcblkXp1
     if (vol->device[vol_len - 2] == 'p' && vol->device[vol_len - 1] != '1') {
@@ -1639,122 +1652,37 @@ int can_partition(const char* volume) {
     return 1;
 }
 
-void show_advanced_menu()
+void show_rainbow_menu()
 {
-    static char* headers[] = {  "Advanced Menu",
+    static char* headers[] = {  "Rainbow Mode",
                                 "",
                                 NULL
     };
 
-    static char* list[] = { "Reboot Recovery",
-                            "Reboot to Bootloader",
-                            "Report error",
-                            "Key test",
-                            "Show log",
-                            "Partition sdcard",
-                            "Partition external_sd",
-                            "Partition internal_sd",
+    static char* list[] = { "Rainbow Enabled",
+                            "Rainbow Disabled",
                             NULL
     };
 
-    char bootloader_mode[PROPERTY_VALUE_MAX];
-    property_get("ro.bootloader.mode", bootloader_mode, "");
-    if (!strcmp(bootloader_mode, "download")) {
-        list[1] = "reboot to download mode";
-    }
-
-    if (!can_partition("/sdcard")) {
-        list[5] = NULL;
-    }
-    if (!can_partition("/external_sd")) {
-        list[6] = NULL;
-    }
-    if (!can_partition("/emmc")) {
-        list[7] = NULL;
-    }
-
     for (;;)
     {
-        int chosen_item = get_filtered_menu_selection(headers, list, 0, 0, sizeof(list) / sizeof(char*));
+		int chosen_item = get_menu_selection(headers, list, 0, 0);
         if (chosen_item == GO_BACK)
             break;
-        switch (chosen_item)
-        {
-            case 0:
-            {
-                ui_print("Rebooting recovery...\n");
-                reboot_main_system(ANDROID_RB_RESTART2, 0, "recovery");
-                break;
-            }
-            case 1:
-            {
-                if (!strcmp(bootloader_mode, "download")) {
-                    ui_print("Rebooting to download mode...\n");
-                    reboot_main_system(ANDROID_RB_RESTART2, 0, "download");
-                } else {
-                    ui_print("Rebooting to bootloader...\n");
-                    reboot_main_system(ANDROID_RB_RESTART2, 0, "bootloader");
-                }
-                break;
-            }
-            case 2:
-                handle_failure(1);
-                break;
-            case 3:
-            {
-				ui_print("Outputting key codes.\n");
-				ui_print("Go back to end debugging.\n");
-				struct keyStruct{
-					int code;
-					int x;
-					int y;
-					int length;
-					int Xlength;
-				}*key;
-                int action;
-                do
-                {
-                    key = ui_wait_key();
-					if(key->code == ABS_MT_POSITION_X)
-					{
-				        action = device_handle_mouse(key, 1);
-						ui_print("Touch: X: %d\tY: %d\n", key->x, key->y);
-					}
-					else if(key->code == KEY_SCROLLDOWN)			//Gesture inputs: Helpful to come out of key test for devices with less hardware keys
-					{
-						action = GO_BACK;
-						ui_print("Gesture Touch: (KEY_SCROLLDOWN) Code: %d\n", key->code);
-					}
-					else if(key->code == KEY_SCROLLUP)
-					{
-						ui_print("Gesture Touch: (KEY_SCROLLUP) Code: %d\n", key->code);
-					}
-					else
-					{
-				        action = device_handle_key(key->code, 1);
-						ui_print("Key: %x\n", key->code);
-					}
-                }
-                while (action != GO_BACK);
-                break;
-			}
-            case 4:
-                ui_printlogtail(12);
-                break;
-            case 5:
-                partition_sdcard("/sdcard");
-                break;
-            case 6:
-                partition_sdcard("/external_sd");
-                break;
-            case 7:
-                partition_sdcard("/emmc");
+		switch (chosen_item)
+        	{
+			case 0:
+                ui_set_rainbow_mode(1);
+                ui_print("Rainbow mode enabled!\n");
+                break;  
+             case 1:
+                ui_set_rainbow_mode(0);
+                ui_print("Rainbow mode disabled\n");
                 break;
         }
     }
 }
 
-//browse and select Aroma File Manager from custom locations on sdcards
 static void choose_aromafm_menu(const char* aromafm_path)
 {
     if (ensure_path_mounted(aromafm_path) != 0) {
@@ -1837,8 +1765,10 @@ void show_carliv_menu()
     };
 
     char* list[] = { "Aroma File Manager",
-                            "Instructions for touch control",
+                            "Rainbow Mode",
+                            "Toggle MD5 Verification",
                             "About",	 	 
+                             NULL,
                              NULL
     };
 
@@ -1880,21 +1810,90 @@ void show_carliv_menu()
                 custom_aroma_menu();
                 break;  
              case 1:
-                ui_print("To control touch navigation menu touch on bottom's icons:\n");
-                ui_print("Go Back, Down, Up, Enter.\n");
-                ui_print("\n");
+                show_rainbow_menu();
                 break;  
              case 2:
-                ui_print("This is a CWM based Recovery with touch screen support and Aroma File Manager capability.\n");
-                ui_print("Developed by carliv from xda with Clockworkmod v. 6.0.4.4 base.\n");
-                ui_print("With touch menu code from Vega Touch and Cannibal Open Touch recovery source, all modified and improved by carliv@xda.\n");
+                toggle_md5_check();
+                break;  
+             case 3:
+                ui_print("This is a CWM Recovery modified by carliv from mtk-developers.com with Clockworkmod version 6 base.\n");
                 ui_print("For Aroma File Manager is recommended version 1.80 - Calung, from amarullz xda thread, because it has a full touch support in most of devices.\n");
                 ui_print("Thank you all!\n");
-                ui_print("\n");
-                break;
+                ui_print("\n\n\n");
+                ui_print("Swipe up/down to change selections.\n");
+			    ui_print("Swipe to the right for enter.\n");
+			    ui_print("Swipe to the left for back.\n");
+                break; 
         }
     }
     
+}
+
+void show_advanced_menu()
+{
+    static char* headers[] = {  "Advanced Menu",
+                                "",
+                                NULL
+    };
+
+    static char* list[] = { "report error",
+                            "key test",
+                            "show log",
+                            "partition sdcard",
+                            "partition external sdcard",
+                            "partition internal sdcard",
+                            NULL
+    };
+    
+    if (!can_partition("/sdcard")) {
+        list[3] = NULL;
+    }
+    if (!can_partition("/external_sd")) {
+        list[4] = NULL;
+    }
+    if (!can_partition("/emmc")) {
+        list[5] = NULL;
+    }
+
+    for (;;)
+    {
+        int chosen_item = get_filtered_menu_selection(headers, list, 0, 0, sizeof(list) / sizeof(char*));
+        if (chosen_item == GO_BACK)
+            break;
+        switch (chosen_item)
+        {
+            case 0:
+                handle_failure(1);
+                break;
+            case 1:
+            {
+                ui_print("Outputting key codes.\n");
+                ui_print("Go back to end debugging.\n");
+                int key;
+                int action;
+                do
+                {
+                    key = ui_wait_key();
+                    action = device_handle_key(key, 1);
+                    ui_print("Key: %d\n", key);
+                }
+                while (action != GO_BACK);
+                break;
+            }
+            case 2:
+                ui_printlogtail(12);
+                break;
+            case 3:
+                partition_sdcard("/sdcard");
+                break;
+            case 4:
+                partition_sdcard("/external_sd");
+                break;
+            case 5:
+                partition_sdcard("/emmc");
+                break;
+        }
+    }
 }
 
 void write_fstab_root(char *path, FILE *file)
@@ -2005,7 +2004,7 @@ void process_volumes() {
     ui_print("in case of error.\n");
 
     nandroid_backup(backup_path);
-    nandroid_restore(backup_path, 1, 1, 1, 1, 1, 0, 0);    
+    nandroid_restore(backup_path, 1, 1, 1, 1, 1, 0);
     ui_set_show_text(0);
 }
 
@@ -2017,7 +2016,7 @@ void handle_failure(int ret)
         return;
     mkdir("/sdcard/clockworkmod", S_IRWXU | S_IRWXG | S_IRWXO);
     __system("cp /tmp/recovery.log /sdcard/clockworkmod/recovery.log");
-    ui_print("/tmp/recovery.log was copied to /sdcard/clockworkmod/recovery.log. Please go to recovery thread to report the issue.\n");
+    ui_print("/tmp/recovery.log was copied to /sdcard/clockworkmod/recovery.log. Please report the issue to recovery thread where you found it.\n");
 }
 
 int is_path_mounted(const char* path) {
@@ -2057,8 +2056,6 @@ int volume_main(int argc, char **argv) {
 }
 
 int verify_root_and_recovery() {
-    write_recovery_version();
-	
     if (ensure_path_mounted("/system") != 0)
         return 0;
 

@@ -474,14 +474,12 @@ ERROR3:
 
 
 int
-mmc_raw_dump_internal 
-(const char* in_file, const char *out_file, unsigned size)
-{
+mmc_raw_dump_internal (const char* in_file, const char *out_file, unsigned sz) {
     int ch;
     FILE *in;
     FILE *out;
     int val = 0;
-    char buf[512];   
+    char buf[512];
     unsigned i;
     int ret = -1;
 
@@ -493,34 +491,35 @@ mmc_raw_dump_internal
     if (out == NULL)
         goto ERROR2;
 
-    if (size == 0)
+    if (sz == 0)
     {
         fseek(in, 0L, SEEK_END);
-        size = ftell(in);
+        sz = ftell(in);
         fseek(in, 0L, SEEK_SET);
-    } 
-   
-    if (size % 512)   
-    {		
-        unsigned counter = 0;      
-        while ( ( ch = fgetc ( in ) ) != EOF )               
+    }
+
+    if (sz % 512)
+    {
+        unsigned counter = 0;
+        while ( ( ch = fgetc ( in ) ) != EOF )
         {
             fputc ( ch, out );
-            
-            if (++counter == size)
-                break;               
-        }        
+#ifdef BOARD_HAS_MTK
+            if (++counter == sz)
+                break;
+#endif
+        }
     }
     else
     {
-        for (i=0; i< (size/512); i++)              
+        for (i=0; i< (sz/512); i++)
         {
             if ((fread(buf, 512, 1, in)) != 1)
                 goto ERROR1;
             if ((fwrite(buf, 512, 1, out)) != 1)
                 goto ERROR1;
         }
-    } 
+    }
 
     fsync(out);
     ret = 0;
@@ -536,7 +535,7 @@ ERROR3:
 // TODO: refactor this to not be a giant copy paste mess
 int
 mmc_raw_dump (const MmcPartition *partition, char *out_file) {
-    return mmc_raw_dump_internal(partition->device_index, out_file, 0);	
+    return mmc_raw_dump_internal(partition->device_index, out_file, 0);
 }
 
 
@@ -607,7 +606,7 @@ int cmd_mmc_restore_raw_partition(const char *partition, const char *filename)
         return mmc_raw_copy(p, filename);
     }
     else {
-        return mmc_raw_dump_internal(filename, partition, 0);		
+        return mmc_raw_dump_internal(filename, partition, 0);
     }
 }
 
@@ -621,34 +620,33 @@ int cmd_mmc_backup_raw_partition(const char *partition, const char *filename)
             return -1;
         return mmc_raw_dump(p, filename);
     }
-    else
-        {        
-        unsigned size = 0;
+    else 
+    {
+        unsigned sz = 0;
 
-#if defined(CWM_EMMC_BOOT_DEVICE_NAME) && defined(CWM_EMMC_BOOT_DEVICE_SIZE)
-        if (strcmp(partition, STR(CWM_EMMC_BOOT_DEVICE_NAME)) == 0) {
-            size = CWM_EMMC_BOOT_DEVICE_SIZE;
-            printf("CWM_EMMC_BOOT_DEVICE: %s; Size: 0x%x\n", partition, size);
+#if defined(MTK_BOOT_DEVICE_NAME) && defined(MTK_BOOT_DEVICE_SIZE)
+        if (strcmp(partition, STR(MTK_BOOT_DEVICE_NAME)) == 0) {
+            sz = MTK_BOOT_DEVICE_SIZE;
+            printf("MTK_BOOT_DEVICE: %s; Size: 0x%x\n", partition, sz);
         }
 #endif
 
-#if defined(CWM_EMMC_RECOVERY_DEVICE_NAME) && defined(CWM_EMMC_RECOVERY_DEVICE_SIZE)
-        if (strcmp(partition, STR(CWM_EMMC_RECOVERY_DEVICE_NAME)) == 0) {
-            size = CWM_EMMC_RECOVERY_DEVICE_SIZE;
-            printf("CWM_EMMC_RECOVERY_DEVICE: %s; Size: 0x%x\n", partition, size);
+#if defined(MTK_RECOVERY_DEVICE_NAME) && defined(MTK_RECOVERY_DEVICE_SIZE)
+        if (strcmp(partition, STR(MTK_RECOVERY_DEVICE_NAME)) == 0) {
+            sz = MTK_RECOVERY_DEVICE_SIZE;
+            printf("MTK_RECOVERY_DEVICE: %s; Size: 0x%x\n", partition, sz);
         }
 #endif
 
-#if defined(CWM_EMMC_UBOOT_DEVICE_NAME) && defined(CWM_EMMC_UBOOT_DEVICE_SIZE)
-        if (strcmp(partition, STR(CWM_EMMC_UBOOT_DEVICE_NAME)) == 0) {
-            size = CWM_EMMC_UBOOT_DEVICE_SIZE;
-            printf("CWM_EMMC_UBOOT_DEVICE: %s; Size: 0x%x\n", partition, size);
+#if defined(MTK_UBOOT_DEVICE_NAME) && defined(MTK_UBOOT_DEVICE_SIZE)
+        if (strcmp(partition, STR(MTK_UBOOT_DEVICE_NAME)) == 0) {
+            sz = MTK_UBOOT_DEVICE_SIZE;
+            printf("MTK_UBOOT_DEVICE: %s; Size: 0x%x\n", partition, sz);
         }
 #endif
-
-        return mmc_raw_dump_internal(partition, filename, size);
-    }         	       
-
+        
+        return mmc_raw_dump_internal(partition, filename, sz);
+    }
 }
 
 int cmd_mmc_erase_raw_partition(const char *partition)

@@ -1,6 +1,7 @@
 extern int signature_check_enabled;
 extern int script_assert_enabled;
 extern int md5_check_enabled;
+extern int minimum_storage;
 
 void
 write_recovery_version();
@@ -38,6 +39,8 @@ show_nandroid_menu();
 
 void
 show_partition_menu();
+
+void partition_sdcard(const char* volume);
 
 int
 install_zip(const char* packagefilepath);
@@ -88,7 +91,11 @@ int run_and_remove_extendedcommand();
 
 int show_lowspace_menu(int i, const char* backup_path);
 
+int show_choose_delete_menu();
+
 int verify_root_and_recovery();
+
+void write_recovery_version();
 
 #ifdef RECOVERY_EXTEND_NANDROID_MENU
 void extend_nandroid_menu(char** items, int item_count, int max_items);

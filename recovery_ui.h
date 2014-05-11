@@ -18,6 +18,7 @@
 #define _RECOVERY_UI_H
 
 #include "common.h"
+#include "minzip/Zip.h"
 
 // Called before UI library is initialized.  Can change things like
 // how many frames are included in various animations, etc.
@@ -93,8 +94,7 @@ extern int ui_root_menu;
 int
 get_menu_selection(char** headers, char** items, int menu_only, int initial_selection);
 
-void
-set_sdcard_update_bootloader_message();
+void set_sdcard_update_bootloader_message();
 
 extern int ui_handle_key(int key, int visible);
 

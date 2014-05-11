@@ -64,4 +64,3 @@ extern int device_reboot_now(volatile char* key_pressed, int key_code);
 // call a clean reboot
 void reboot_main_system(int cmd, int flags, char *arg);
 
-int minimum_storage=512;

@@ -167,7 +167,7 @@ static void draw_install_overlay_locked(int frame) {
 static void draw_background_locked(int icon)
 {
     gPagesIdentical = 0;
-    // gr_color(0, 0, 0, 0);
+    // gr_color(0, 0, 0, 255);
     // gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 
     {
@@ -887,7 +887,7 @@ void ui_printlogtail(int nb_lines) {
     ui_log_stdout=1;
 }
 
-#define MENU_ITEM_HEADER " +>  "
+#define MENU_ITEM_HEADER " - "
 #define MENU_ITEM_HEADER_LENGTH strlen(MENU_ITEM_HEADER)
 
 int ui_start_menu(char** headers, char** items, int initial_selection) {
@@ -908,7 +908,7 @@ int ui_start_menu(char** headers, char** items, int initial_selection) {
         }
 
         if (gShowBackButton && !ui_root_menu) {
-            strcpy(menu[i], " <<<<  Go Back --");
+            strcpy(menu[i], " - <<-  Go Back   ");
             ++i;
         }
 

@@ -44,12 +44,10 @@
 
 #include "adb_install.h"
 
-int backupfmt = NULL;
 int signature_check_enabled = 1;
 int script_assert_enabled = 1;
-int md5_check_enabled = 0;
+int md5_check_enabled = 1;
 static const char *SDCARD_UPDATE_FILE = "/sdcard/update.zip";
-int t;
 
 int
 get_filtered_menu_selection(char** headers, char** items, int menu_only, int initial_selection, int items_count) {
@@ -85,7 +83,7 @@ void write_string_to_file(const char* filename, const char* string) {
     sprintf(tmp, "mkdir -p $(dirname %s)", filename);
     __system(tmp);
     FILE *file = fopen(filename, "w");
-    if( file != NULL) {
+    if (file != NULL) {
         fprintf(file, "%s", string);
         fclose(file);
     }
@@ -211,13 +209,13 @@ void show_install_update_menu()
                                     NULL };
 
     char *other_sd = NULL;
-    if (volume_for_path("/emmc") != NULL) {
+    if(EXTRA_SDCARD == EMMC) {
+		install_menu_items[5] = "choose zip from internal sdcard";
         other_sd = "/emmc/";
-        install_menu_items[5] = "choose zip from internal sdcard";
-    }
-    else if (volume_for_path("/external_sd") != NULL) {
+    } 
+    else if (EXTRA_SDCARD == EXTERNALSD) {
+		install_menu_items[5] = "choose zip from external sdcard";
         other_sd = "/external_sd/";
-        install_menu_items[5] = "choose zip from external sdcard";
     }
     
     for (;;)
@@ -565,12 +563,12 @@ void show_nandroid_delete_menu(const char* path)
 
 int show_choose_delete_menu() 
 {
-    static char *CHOOSE_DELETE_MENU_ITEMS[] = { "View and delete backups on /sdcard",
+    static char *CHOOSE_DELETE_MENU_ITEMS[] = { "View and delete old backups",
                                                 NULL,
                                                 NULL };
 
     #define ITEM_VIEW_BACKUPS_ON_SDCARD 0
-    #define ITEM_VIEW_BACKUPS_ON_OTHERSD 1
+    #define ITEM_VIEW_BACKUPS_ON_EXTRASD 1
 
     static char* headers[] = { "Choose a device to delete",
                                "backups from.",
@@ -578,10 +576,13 @@ int show_choose_delete_menu()
                                NULL
     };
 
-    if(strcasecmp(EXTRA_SDCARD,"/emmc")) {
+    char *other_sd = NULL;
+    if(EXTRA_SDCARD == EMMC) {
         CHOOSE_DELETE_MENU_ITEMS[1]="View and delete backups on /emmc";
-    } else if(strcasecmp(EXTRA_SDCARD,"/external_sd")) {
+        other_sd = "/emmc";
+    } else if (EXTRA_SDCARD == EXTERNALSD) {
         CHOOSE_DELETE_MENU_ITEMS[1]="View and delete backups on /external_sd";
+        other_sd = "/external_sd";
     }
 
     for (;;) {
@@ -591,7 +592,7 @@ int show_choose_delete_menu()
             case ITEM_VIEW_BACKUPS_ON_SDCARD:
                 nandroid_get_backup_path(base_path, 0);
                 break;
-            case ITEM_VIEW_BACKUPS_ON_OTHERSD:
+            case ITEM_VIEW_BACKUPS_ON_EXTRASD:
                 nandroid_get_backup_path(base_path, 1);
                 break;
             default:
@@ -618,7 +619,7 @@ static void run_dedupe_gc(const char* other_sd) {
 
 int show_lowspace_menu(int i, const char* backup_path)
 {
-	static char *LOWSPACE_MENU_ITEMS[5] = { "Continue with backup",
+	static char *LOWSPACE_MENU_ITEMS[4] = { "Continue with backup",
 											"View and delete old backups",
                                             NULL,
                                             NULL,
@@ -628,7 +629,7 @@ int show_lowspace_menu(int i, const char* backup_path)
 	#define ITEM_VIEW_DELETE_BACKUPS 1
     #define ITEM_FREE_DATA_OR_CANCEL 2
 
-    if(!backupfmt) {
+    if(nandroid_get_default_backup_format() == NANDROID_BACKUP_FORMAT_DUP) {
         LOWSPACE_MENU_ITEMS[2] = "Free unused backup data";
         LOWSPACE_MENU_ITEMS[3] = "Cancel backup";
     } else {
@@ -664,7 +665,7 @@ int show_lowspace_menu(int i, const char* backup_path)
 				break;
             }
             case ITEM_FREE_DATA_OR_CANCEL: {
-                if(backupfmt) {
+                if(nandroid_get_default_backup_format() == NANDROID_BACKUP_FORMAT_TAR) {
                     ui_print("Cancelling backup.\n");
                     return 1;
                 }
@@ -757,7 +758,6 @@ int control_usb_storage_for_lun(Volume* vol, bool enable) {
         "/sys/devices/platform/usb_mass_storage/lun%d/file",
         "/sys/class/android_usb/android0/f_mass_storage/lun/file",
         "/sys/class/android_usb/android0/f_mass_storage/lun_ex/file",
-        "/sys/devices/platform/mt_usb/gadget/lun%d/file",
         NULL
     };
 
@@ -1017,7 +1017,7 @@ int format_unknown_device(const char *device, const char* path, const char *fs_t
         return 0;
     }
 
-    static char tmp[PATH_MAX];
+    char tmp[PATH_MAX];
     if (strcmp(path, "/data") == 0) {
         sprintf(tmp, "cd /data ; for f in $(ls -a | grep -v ^media$); do rm -rf $f; done");
         __system(tmp);
@@ -1393,12 +1393,10 @@ static void choose_default_backup_format() {
     int chosen_item = get_menu_selection(headers, list, 0, 0);
     switch (chosen_item) {
         case 0:
-            backupfmt = 0;
             write_string_to_file(NANDROID_BACKUP_FORMAT_FILE, "tar");
             ui_print("Default backup format set to tar.\n");
             break;
         case 1:
-            backupfmt = 1;
             write_string_to_file(NANDROID_BACKUP_FORMAT_FILE, "dup");
             ui_print("Default backup format set to dedupe.\n");
             break;
@@ -1420,15 +1418,15 @@ void show_nandroid_advanced_menu()
     };
     
     char *other_sd = NULL;
-    if (volume_for_path("/emmc") != NULL) {
-        other_sd = "/emmc";
+    if(EXTRA_SDCARD == EMMC) {
         list[2] = "Advanced backup to internal_sd";
         list[3] = "Advanced restore from internal_sd";
+        other_sd = "/emmc";
     }
-    else if (volume_for_path("/external_sd") != NULL) {
-        other_sd = "/external_sd";
+    else if (EXTRA_SDCARD == EXTERNALSD) {        
         list[2] = "Advanced backup to external_sd";
         list[3] = "Advanced restore from external_sd";
+        other_sd = "/external_sd";
     }	
 #ifdef RECOVERY_EXTEND_NANDROID_MENU
     extend_nandroid_menu(list, 4, sizeof(list) / sizeof(char*));
@@ -1493,7 +1491,8 @@ void show_nandroid_menu()
                             NULL
     };
     
-    if(!backupfmt) list[5] = "Free Unused Old Data";
+    if(nandroid_get_default_backup_format() == NANDROID_BACKUP_FORMAT_DUP) 
+        list[5] = "Free Unused Old Data";
 
     char *other_sd = NULL;
     if(EXTRA_SDCARD == EMMC) {
@@ -1573,7 +1572,7 @@ void show_nandroid_menu()
     }
 }
 
-static void partition_sdcard(const char* volume) {
+void partition_sdcard(const char* volume) {
     if (!can_partition(volume)) {
         ui_print("Can't partition device: %s\n", volume);
         return;
@@ -1704,6 +1703,7 @@ static void choose_aromafm_menu(const char* aromafm_path)
         install_zip(aroma_file);
     }
 }
+
 //Show custom aroma menu: manually browse sdcards for Aroma file manager
 static void custom_aroma_menu() {
     static char* headers[] = {  "Browse for aromafm.zip",
@@ -1741,6 +1741,7 @@ static void custom_aroma_menu() {
         }
     }
 }
+
 //launch aromafm.zip from default locations
 static int default_aromafm (const char* aromafm_path) {
         if (ensure_path_mounted(aromafm_path) != 0) {
@@ -1994,7 +1995,10 @@ void process_volumes() {
     struct timeval tp;
     gettimeofday(&tp, NULL);
     sprintf(backup_name, "before-ext4-convert-%d", tp.tv_sec);
-    sprintf(backup_path, "/sdcard/clockworkmod/backup/%s", backup_name);
+    struct stat st;
+
+	char base_path[PATH_MAX];
+	nandroid_get_backup_path(base_path, 0);
 
     ui_set_show_text(1);
     ui_print("Filesystems need to be converted to ext4.\n");
@@ -2012,11 +2016,35 @@ void handle_failure(int ret)
 {
     if (ret == 0)
         return;
-    if (0 != ensure_path_mounted("/sdcard"))
-        return;
-    mkdir("/sdcard/clockworkmod", S_IRWXU | S_IRWXG | S_IRWXO);
-    __system("cp /tmp/recovery.log /sdcard/clockworkmod/recovery.log");
-    ui_print("/tmp/recovery.log was copied to /sdcard/clockworkmod/recovery.log. Please report the issue to recovery thread where you found it.\n");
+        
+    char tmp[PATH_MAX];
+    if(EXTRA_SDCARD == EMMC) {
+        if(0 != ensure_path_mounted("/emmc")) {
+            ui_print("Can't mount /emmc.\n");
+            return -1;
+        }
+        strcpy(tmp, "/emmc/clockworkmod" );
+    } else if(EXTRA_SDCARD == EXTERNALSD) {
+        if(0 != ensure_path_mounted("/external_sd")) {
+            ui_print("Can't mount /external_sd.\n");
+            return -1;
+        }
+        strcpy(tmp, "/external_sd/clockworkmod" );
+    } else {
+        if(0 != ensure_path_mounted("/sdcard")) {
+            ui_print("Can't mount /sdcard.\n");
+            return -1;
+        }
+        strcpy(tmp, "/sdcard/clockworkmod");
+    }
+
+    mkdir(tmp, S_IRWXU | S_IRWXG | S_IRWXO);
+
+    char cmd[PATH_MAX];
+	sprintf(cmd, "cp /tmp/recovery.log %s/recovery.log", tmp);
+    __system(cmd);
+
+    ui_print("/tmp/recovery.log was copied to /your_sdcard/clockworkmod/recovery.log. Please report the issue to recovery thread where you found it.\n");
 }
 
 int is_path_mounted(const char* path) {

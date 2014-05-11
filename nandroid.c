@@ -41,6 +41,8 @@
 #include "flashutils/flashutils.h"
 #include <libgen.h>
 
+int minimum_storage = 512;
+
 void nandroid_get_root_backup_path(const char* backup_path, int other_sd)
 {
 	if (other_sd) {
@@ -101,7 +103,7 @@ static void get_post_backup_cmd(const char* cmd, int other_sd)
 
 static void ensure_directory(const char* dir) {
     char tmp[PATH_MAX];
-    sprintf(tmp, "mkdir -p %s ; chmod 777 %s", dir, dir);
+    sprintf(tmp, "mkdir -p %s && chmod 777 %s", dir, dir);
     __system(tmp);
 }
 
@@ -274,10 +276,8 @@ static void refresh_default_backup_handler() {
 unsigned nandroid_get_default_backup_format() {
     refresh_default_backup_handler();
     if (default_backup_handler == dedupe_compress_wrapper) {
-		backupfmt = 1;
         return NANDROID_BACKUP_FORMAT_DUP;
     } else {
-		backupfmt = 0;
         return NANDROID_BACKUP_FORMAT_TAR;
     }
 }

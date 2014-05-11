@@ -11,7 +11,6 @@ int nandroid_undump(const char* partition);
 void nandroid_dedupe_gc(const char* blob_dir);
 void nandroid_force_backup_format(const char* fmt);
 unsigned nandroid_get_default_backup_format();
-void nandroid_get_base_backup_path(const char* backup_path, int other_sd);
 void nandroid_get_root_backup_path(const char* backup_path, int other_sd);
 void nandroid_get_backup_path(const char* backup_path, int other_sd);
 int recalc_sdcard_space();

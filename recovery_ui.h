@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "minui/minui.h"
+#include "minzip/Zip.h"
 
 // Called before UI library is initialized.  Can change things like
 // how many frames are included in various animations, etc.
@@ -101,8 +102,7 @@ extern gr_surface *gMenuIco;
 int
 get_menu_selection(char** headers, char** items, int menu_only, int initial_selection);
 
-void
-set_sdcard_update_bootloader_message();
+void set_sdcard_update_bootloader_message();
 
 static void draw_screen_locked(void);
 static void update_screen_locked(void);

@@ -40,6 +40,8 @@
 #include "libubi.h"
 #include "ubiutils-common.h"
 
+#include "install.h"
+#include "minzip/Zip.h"
 #define DEFAULT_CTRL_DEV "/dev/ubi_ctrl"
 #ifdef USE_EXT4
 #include "make_ext4fs.h"
@@ -986,6 +988,118 @@ Value* FileGetPropFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(result);
 }
 
+Value* IsFileExistFn(const char* name, State* state, int argc, Expr* argv[]) {
+    char* result = NULL;
+    char* filename;
+    if (ReadArgs(state, argv, 1, &filename) < 0) {
+        return NULL;
+    }
+
+    struct stat st;
+    if (stat(filename, &st) < 0) {
+		result = strdup("file_not_exit");
+        return StringValue(result);
+    }
+
+  done:
+	result = strdup(filename);
+    free(filename);
+    return StringValue(result);
+}
+Value* InstallPackageFn(const char* name, State* state, int argc, Expr* argv[]) {
+    char* result = NULL;
+    char* pkgpath;
+    if (ReadArgs(state, argv, 1, &pkgpath) < 0) {
+        return NULL;
+    }
+
+    struct stat st;
+    if (stat(pkgpath, &st) < 0) {
+		result = strdup("");
+        return StringValue(result);
+    }
+
+
+    ZipArchive za;
+    int err;
+    err = mzOpenZipArchive(pkgpath, &za);
+    if (err != 0) {
+        fprintf(stderr, "failed to open package %s: %s\n",
+                pkgpath, strerror(err));
+        result = strdup("");
+        return StringValue(result);
+    }
+
+    const ZipEntry* script_entry = mzFindZipEntry(&za, SCRIPT_NAME);
+    if (script_entry == NULL) {
+        fprintf(stderr, "failed to find %s in %s\n", SCRIPT_NAME, pkgpath);
+        result = strdup("");
+        return StringValue(result);
+    }
+
+    char* script = malloc(script_entry->uncompLen+1);
+    if (!mzReadZipEntry(&za, script_entry, script, script_entry->uncompLen)) {
+        fprintf(stderr, "failed to read script from package\n");
+        result = strdup("");
+        return StringValue(result);
+    }
+    script[script_entry->uncompLen] = '\0';
+
+
+    // Parse the script.
+    Expr* root;
+    int error_count = 0;
+    yy_scan_string(script);
+    int error = yyparse(&root, &error_count);
+    if (error != 0 || error_count > 0) {
+        fprintf(stderr, "%d parse errors\n", error_count);
+        result = strdup("");
+        return StringValue(result);
+    }
+
+    // Evaluate the parsed script.
+
+    UpdaterInfo updater_info;
+    //updater_info.cmd_pipe = cmd_pipe;
+    updater_info.package_zip = &za;
+    updater_info.version = atoi("2");
+
+    State pkg_state;
+    pkg_state.cookie = &updater_info;
+    pkg_state.script = script;
+    pkg_state.errmsg = NULL;
+
+    /*char*/ result = Evaluate(&pkg_state, root);
+    if (result == NULL) {
+        if (pkg_state.errmsg == NULL) {
+            fprintf(stderr, "script aborted (no error message)\n");
+            //fprintf(cmd_pipe, "ui_print script aborted (no error message)\n");
+        } else {
+            fprintf(stderr, "script aborted: %s\n", pkg_state.errmsg);
+            char* line = strtok(pkg_state.errmsg, "\n");
+            while (line) {
+                //fprintf(cmd_pipe, "ui_print %s\n", line);
+                line = strtok(NULL, "\n");
+            }
+            //fprintf(cmd_pipe, "ui_print\n");
+        }
+        free(pkg_state.errmsg);
+        return 7;
+    } else {
+        fprintf(stderr, "script result was [%s]\n", result);
+        free(result);
+    }
+
+    if (updater_info.package_zip) {
+        mzCloseZipArchive(updater_info.package_zip);
+    }
+    free(script);
+
+    done:
+	result = strdup(pkgpath);
+    free(pkgpath);
+    return StringValue(result);
+}
 
 static bool write_raw_image_cb(const unsigned char* data,
                                int data_len, void* ctx) {
@@ -995,21 +1109,159 @@ static bool write_raw_image_cb(const unsigned char* data,
     return false;
 }
 
+static int write_data(int ctx, const char *data, size_t len)
+{
+    size_t wrote = len;
+    fprintf(stderr, "------------data len = %d\n", len);
+    int fd = ctx;
+    int size = len;
+    off_t pos = lseek(fd, 0, SEEK_CUR);
+    fprintf(stderr, "------------data len = %d pos = %d\n", len, pos);
+    char *verify = NULL;
+    if (/*lseek(fd, pos, SEEK_SET) != pos ||*/
+        write(fd, data, len) != len) {
+        fprintf(stderr, " write error at 0x%08lx (%s)\n",
+        		pos, strerror(errno));
+    }
+
+    verify = malloc(size);
+    if (verify == NULL) {
+        fprintf(stderr, "mtd: failed to malloc size=%u (%s)\n", size, strerror(errno));
+        return -1;
+    }
+    if (lseek(fd, pos, SEEK_SET) != pos ||
+        read(fd, verify, size) != size) {
+        fprintf(stderr, "mtd: re-read error at 0x%08lx (%s)\n",
+            pos, strerror(errno));
+        if (verify)
+            free(verify);
+        return -1;
+    }
+    if (memcmp(data, verify, size) != 0) {
+        fprintf(stderr, "mtd: verification error at 0x%08lx (%s)\n",
+        		pos, strerror(errno));
+        if (verify)
+            free(verify);
+        return -1;
+    }
+
+    fprintf(stderr, " successfully wrote data at %llx\n", pos);
+    if (verify)
+        free(verify);
+    
+    return wrote;
+}
+
+char * block_write_data( Value* contents, char * name)
+{
+    char devname[32];
+    int fd;	
+    char *result;
+    bool success;
+    
+    //sprintf(devname, "/dev/block/nand%s", name);
+    sprintf(devname, "/dev/block/%s", name);
+    if(!strncmp(name, "bootloader", strlen("bootloader"))){
+
+        sprintf(devname, "/dev/%s", name);
+        fd = open(devname, O_RDWR);
+        if (fd < 0) {
+            printf("/dev/%s open failed",name);
+            result = strdup("");
+			goto done;
+        }
+
+        size_t len =  contents->size;
+        fprintf(stderr, "------------data len = %d\n", len);
+        int size =  contents->size;
+        off_t pos = lseek(fd, 0, SEEK_CUR);
+        /*fprintf(stderr, "------------data len = %d pos = %d\n", len, pos);*/
+        if (/*lseek(fd, pos, SEEK_SET) != pos ||*/
+            write(fd, contents->data, size) != size) {
+                fprintf(stderr, " write error at 0x%08lx (%s)\n",
+				pos, strerror(errno));
+		}
+        if (close(fd)) {
+            result = strdup("");
+            printf("close failed !!!!");
+        }
+		
+        success = true;
+	
+	}else{
+		
+		fd = open(devname, O_RDWR);
+		if (fd < 0) {
+			//printf("/dev/block/nand%s open failed",name);
+			printf("/dev/block/%s open failed",name);
+			result = strdup("");
+	        		goto done;
+		}
+
+		if (contents->type == VAL_STRING){
+			
+			printf( "###here");	
+			char* filename = contents->data;
+			FILE* f = fopen(filename, "rb");
+			if (f == NULL) {
+				fprintf(stderr, "%s: can't open %s: %s\n",
+						name, filename, strerror(errno));
+				result = strdup("");
+				goto done;
+			}
+
+			success = true;
+			char* buffer = malloc(BUFSIZ);
+			int read;
+			while (success && (read = fread(buffer, 1, BUFSIZ, f)) > 0) {
+				int wrote = write_data(fd, buffer, read);
+				success = success && (wrote == read);
+			}
+			free(buffer);
+			fclose(f);
+		} else {
+			printf( "@@@here");
+			ssize_t wrote = write_data(fd, contents->data, contents->size);
+			success = (wrote == contents->size);
+		}
+
+		if (!success) {
+	       		 fprintf(stderr, "write_data to %s failed: %s\n",
+	               		 name, strerror(errno));
+		}
+		
+	    	printf("%s %s partition\n",
+	         		  success ? "wrote" : "failed to write", name);
+			
+	    	if (close(fd)) {
+	            result = strdup("");
+			printf("close failed !!!!");
+	    	}
+	}
+			
+		result = success ? name : strdup("");
+done:
+	return result;
+}
+
 // write_raw_image(filename_or_blob, partition)
 Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     char* result = NULL;
 
     Value* partition_value;
     Value* contents;
+	MtdWriteContext* ctx;
     if (ReadValueArgs(state, argv, 2, &contents, &partition_value) < 0) {
         return NULL;
     }
 
+    char* partition = NULL;
     if (partition_value->type != VAL_STRING) {
         ErrorAbort(state, "partition argument to %s must be string", name);
         goto done;
     }
-    char* partition = partition_value->data;
+    partition = partition_value->data;
+    printf( "%s:   partition named \"%s\"\n", name, partition);
     if (strlen(partition) == 0) {
         ErrorAbort(state, "partition argument to %s can't be empty", name);
         goto done;
@@ -1018,15 +1270,80 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
         ErrorAbort(state, "file argument to %s can't be empty", name);
         goto done;
     }
+	
+    if (access("/proc/ntd", F_OK) != 0){
+        printf("old nand driver \n");
+    	
+    mtd_scan_partitions();
+    const MtdPartition* mtd = mtd_find_partition_by_name(partition);
+	if(mtd != NULL){
+	    ctx = mtd_write_partition(mtd);
+	    if (ctx == NULL) {
+	        fprintf(stderr, "%s: can't write mtd partition \"%s\"\n",
+	                name, partition);
+	        result = strdup("");
+	        goto done;
+	    }
+	}else{
+        fprintf(stderr, "access emmc partition %s\n", partition);
+		ctx = emmc_write_partition(partition);
+	    if (ctx == NULL) {
+	        fprintf(stderr, "%s: can't write eMMC partition \"%s\"\n",
+	                name, partition);
+	        result = strdup("");
+	        goto done;
+	    }
+	}
 
-    char* filename = contents->data;
-    if (0 == restore_raw_partition(NULL, partition, filename))
-        result = strdup(partition);
-    else {
-        result = strdup("");
-        goto done;
+    bool success;
+
+    if (contents->type == VAL_STRING) {
+        // we're given a filename as the contents
+        char* filename = contents->data;
+        FILE* f = fopen(filename, "rb");
+        if (f == NULL) {
+            fprintf(stderr, "%s: can't open %s: %s\n",
+                    name, filename, strerror(errno));
+            result = strdup("");
+            goto done;
+        }
+
+        success = true;
+        char* buffer = malloc(BUFSIZ);
+        int read;
+        while (success && (read = fread(buffer, 1, BUFSIZ, f)) > 0) {
+            int wrote = mtd_write_data(ctx, buffer, read);
+            success = success && (wrote == read);
+        }
+        free(buffer);
+        fclose(f);
+    } else {
+        // we're given a blob as the contents
+        ssize_t wrote = mtd_write_data(ctx, contents->data, contents->size);
+        success = (wrote == contents->size);
+    }
+    if (!success) {
+        fprintf(stderr, "mtd_write_data to %s failed: %s\n",
+                partition, strerror(errno));
     }
 
+    if (mtd_erase_blocks(ctx, -1) == -1) {
+        fprintf(stderr, "%s: error erasing blocks of %s\n", name, partition);
+    }
+    if (mtd_write_close(ctx) != 0) {
+        fprintf(stderr, "%s: error closing write of %s\n", name, partition);
+    }
+
+    printf("%s %s partition\n",
+           success ? "wrote" : "failed to write", partition);
+
+    result = success ? partition : strdup("");
+    }else{
+
+	printf("new nand driver\n");
+	result = block_write_data(contents, partition);
+	}
+	
 done:
     if (result != partition) FreeValue(partition_value);
     FreeValue(contents);
@@ -1339,6 +1656,43 @@ Value* ReadFileFn(const char* name, State* state, int argc, Expr* argv[]) {
     return v;
 }
 
+Value* SetBootloaderEnvFn(const char* name, State* state, int argc, Expr* argv[])
+{
+    char* result = NULL;
+    if (argc != 2) {
+        return ErrorAbort(state, "%s() expects 3 args, got %d", name, argc);
+    }
+    char* env_name;
+    char* env_val;
+
+    if (ReadArgs(state, argv, 2, &env_name, &env_val) < 0) {
+        return NULL;
+    }
+
+    if (strlen(env_name) == 0) {
+        ErrorAbort(state, "env_name argument to %s() can't be empty", name);
+        goto done;
+    }
+    if (strlen(env_val) == 0) {
+        ErrorAbort(state, "env_val argument to %s() can't be empty",
+                   name);
+        goto done;
+    }
+
+	char *fw_argv[] = { "fw_setenv",
+                         env_name,
+                         env_val,
+                         NULL };
+	if(fw_setenv(3, fw_argv) == 0)
+	{
+		result = env_name;
+	}
+
+done:
+    free(env_val);
+    if (result != env_name) free(env_name);
+    return StringValue(result);
+}
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -1370,4 +1724,7 @@ void RegisterInstallFunctions() {
     RegisterFunction("ui_print", UIPrintFn);
 
     RegisterFunction("run_program", RunProgramFn);
+	RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
+	RegisterFunction("is_file_exist", IsFileExistFn);
+	RegisterFunction("install_package", InstallPackageFn);
 }

@@ -34,7 +34,7 @@ int device_flash_type()
 
 char* get_default_filesystem()
 {
-#ifdef USE_UBIFS	
+#ifdef TARGET_USERIMAGES_USE_UBIFS	
     return device_flash_type() == MMC ? "ext3" : "ubifs";
 #else 
     return device_flash_type() == MMC ? "ext3" : "yaffs2";

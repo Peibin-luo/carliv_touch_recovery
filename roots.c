@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -28,6 +29,7 @@
 #include "common.h"
 #include "make_ext4fs.h"
 #include "libubi.h"
+#include "cutils/properties.h"
 
 #include <libgen.h>
 #include "flashutils/flashutils.h"
@@ -396,12 +398,11 @@ out_ubi_close:
 static int ignore_data_media = 0;
 
 int ensure_path_unmounted(const char* path) {
-	int ret;
     // if we are using /data/media, do not ever unmount volumes /data or /sdcard
     if (strstr(path, "/data") == path && is_data_media() && !ignore_data_media) {
         return 0;
     }
-
+    int ret;
     Volume* v = volume_for_path(path);
     if (v == NULL) {
         LOGE("unknown volume for path [%s]\n", path);
@@ -540,6 +541,9 @@ int format_volume(const char* volume) {
             LOGW("format_volume: can't close MTD \"%s\"\n", v->device);
             return -1;
         }
+        if (strcmp(v->fs_type, "ubifs") == 0) {
+            return format_ubifs_volume(v->device);
+        }
         return 0;
     }
 
@@ -548,9 +552,6 @@ int format_volume(const char* volume) {
         if (result != 0) {
             LOGE("format_volume: make_extf4fs failed on %s\n", v->device);
             return -1;
-        }
-        if (strcmp(v->fs_type, "ubifs") == 0) {
-            return format_ubifs_volume(v->device);
         }
         return 0;
     }

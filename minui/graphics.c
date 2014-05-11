@@ -80,36 +80,6 @@ static int gr_vt_fd = -1;
 static struct fb_var_screeninfo vi;
 static struct fb_fix_screeninfo fi;
 
-static int
-write_int(char const* path, int value)
-{
-    int fd;
-    static int already_warned = 0;
-
-    fd = open(path, O_RDWR);
-    if (fd >= 0) {
-        char buffer[20];
-        int bytes = sprintf(buffer, "%d\n", value);
-        int amt = write(fd, buffer, bytes);
-        close(fd);
-        return amt == -1 ? -1 : 0;
-    } else {
-        if (already_warned == 0) {
-            printf("write_int failed to open %s\n", path);
-            already_warned = 1;
-        }
-        return -1;
-    }
-}
-
-static int
-set_light_backlight(int brightness)
-{
-    int err = 0;
-    err = write_int("/sys/class/leds/lcd-backlight/brightness", brightness);
-    return err;
-}
-
 static int get_framebuffer(GGLSurface *fb)
 {
     int fd;

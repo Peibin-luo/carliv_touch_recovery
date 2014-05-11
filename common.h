@@ -199,9 +199,6 @@ FILE* fopen_path(const char *path, const char *mode);
 int ui_get_selected_item();
 int ui_is_showing_back_button();
 
-extern int minimum_storage;
-extern int backupfmt;
-
 #define EMMC 1
 #define EXTERNALSD 2
 

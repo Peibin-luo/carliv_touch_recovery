@@ -20,9 +20,13 @@ LOCAL_SRC_FILES := \
     prop.c \
     default_recovery_ui.c \
     adb_install.c \
-    verifier.c \
     ubi/ubiutils-common.c \
-    ubi/libubi.c
+    ubi/libubi.c \
+    verifier.c
+    
+LOCAL_C_INCLUDES += external/fw_env/ \
+    external/mtd-utils/include/ \
+    external/mtd-utils/ubi-utils/include   
 
 ADDITIONAL_RECOVERY_FILES := $(shell echo $$ADDITIONAL_RECOVERY_FILES)
 LOCAL_SRC_FILES += $(ADDITIONAL_RECOVERY_FILES)
@@ -47,7 +51,7 @@ RECOVERY_TYPE :=
 endif
 
 RECOVERY_VERSION := $(RECOVERY_NAME) v2.3
-RECOVERY_VERSION_INFO := CWM-based Recovery v6+ $(RECOVERY_TYPE)
+RECOVERY_VERSION_INFO := CWM-based Recv v6+ $(RECOVERY_TYPE)-ubifs
 
 LOCAL_CFLAGS += -DRECOVERY_VERSION="$(RECOVERY_VERSION)"
 LOCAL_CFLAGS += -DRECOVERY_VERSION_INFO="$(RECOVERY_VERSION_INFO)"
@@ -82,9 +86,6 @@ LOCAL_STATIC_LIBRARIES :=
 LOCAL_CFLAGS += -DUSE_EXT4
 LOCAL_C_INCLUDES += system/extras/ext4_utils
 LOCAL_STATIC_LIBRARIES += libext4_utils_static libz libsparse_static
-
-LOCAL_CFLAGS += -DUSE_UBIFS
-LOCAL_C_INCLUDES += bootable/recovery/ubi/include
 
 # This binary is in the recovery ramdisk, which is otherwise a copy of root.
 # It gets copied there in config/Makefile.  LOCAL_MODULE_TAGS suppresses

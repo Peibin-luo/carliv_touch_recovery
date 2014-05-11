@@ -37,7 +37,10 @@ LOCAL_STATIC_LIBRARIES += libmincrypt libbz
 LOCAL_STATIC_LIBRARIES += libminelf
 LOCAL_STATIC_LIBRARIES += libcutils libstdc++ libc
 LOCAL_STATIC_LIBRARIES += libselinux
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
+LOCAL_C_INCLUDES += external/fw_env/ \
+	$(LOCAL_PATH)/../../../external/mtd-utils/include/ \
+	$(LOCAL_PATH)/../../../external/mtd-utils/ubi-utils/include \
+	$(LOCAL_PATH)/..
 
 # Each library in TARGET_RECOVERY_UPDATER_LIBS should have a function
 # named "Register_<libname>()".  Here we emit a little C function that
@@ -74,11 +77,6 @@ $(inc) : $(inc_dep_file)
 
 $(call intermediates-dir-for,EXECUTABLES,updater)/updater.o : $(inc)
 LOCAL_C_INCLUDES += $(dir $(inc))
-
-ifeq ($(TARGET_USERIMAGES_USE_UBIFS), true)
-LOCAL_CFLAGS += -DUSE_UBIFS
-LOCAL_C_INCLUDES += bootable/recovery/ubi/include
-endif
 
 inc :=
 inc_dep_file :=

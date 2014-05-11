@@ -680,7 +680,8 @@ void wipe_data(int confirm) {
     if (has_datadata()) {
         erase_volume("/datadata");
     }
-    erase_volume("/sd-ext");
+    if (volume_for_path("/sd-ext") != NULL)
+         erase_volume("/sd-ext");
     erase_volume("/sdcard/.android_secure");
     ui_print("Data wipe complete.\n");
 }
@@ -697,7 +698,8 @@ void wipe_cache(int confirm) {
 
 void wipe_dalvik_cache(int confirm) {
 	ensure_path_mounted("/data");	
-	ensure_path_mounted("/sd-ext");
+	if (volume_for_path("/sd-ext") != NULL)
+        ensure_path_mounted("/sd-ext");
 	ensure_path_mounted("/cache");
 	if (confirm && confirm_selection( "Confirm wipe?", "Yes - Wipe Dalvik Cache")) {
 		__system("rm -r /data/dalvik-cache");
@@ -721,7 +723,7 @@ void wipe_all(int confirm)
 			return;
 		}
 
-        if (!confirm_selection("Are you sure?", "Yes"))
+        if (!confirm_selection("Are you sure? It will wipe even system.", "Yes"))
         {
 			return;
 		}
@@ -735,7 +737,8 @@ void wipe_all(int confirm)
     if (has_datadata()) {
         erase_volume("/datadata");
     }
-    erase_volume("/sd-ext");
+    if (volume_for_path("/sd-ext") != NULL)
+        ensure_path_mounted("/sd-ext");
     erase_volume("/sdcard/.android_secure");
 	ui_print("Full wipe complete!\n");
 }
@@ -926,7 +929,7 @@ main(int argc, char **argv) {
 
     device_ui_init(&ui_parameters);
     ui_init();
-    ui_print(EXPAND(RECOVERY_VERSION)" with ubifs support\n");
+    ui_print(EXPAND(RECOVERY_VERSION)"\n");
 //  ui_print("Compiled by ............\n");
     
 #ifdef BOARD_RECOVERY_SWIPE
@@ -1047,13 +1050,20 @@ main(int argc, char **argv) {
         // let's set up some default options
         signature_check_enabled = 0;
         script_assert_enabled = 0;
-        md5_check_enabled = 1;
+        md5_check_enabled = 0;
         is_user_initiated_recovery = 1;
         if (!headless) {
           ui_set_show_text(1);
           ui_set_background(BACKGROUND_ICON_CLOCKWORK);
-          ui_reset_icons();
         }
+        
+        if (volume_for_path("/emmc") != NULL) {
+            EXTRA_SDCARD = EMMC;
+        } else if (volume_for_path("/external_sd") != NULL) {
+            EXTRA_SDCARD = EXTERNALSD;
+        }
+         
+        ui_reset_icons();
         
         if (extendedcommand_file_exists()) {
             LOGI("Running extendedcommand...\n");
